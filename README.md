@@ -8,18 +8,21 @@ There's no MCP server or tool schema to learn. The agent reads this file and wri
 
 ```sh
 bun install
-bun run sync                                  # ~3 min: rebuild data/eatclub.db (website + app API + live deals)
-bun run live                                  # ~1 min: refresh only today's live deal state
-bun run walk -33.8688 151.2093 --max 10       # OSM walking times from a point → walk_times
+bun run map                                   # once: build data/walk-graph.bin from an OSM extract (see Sources)
+bun run sync                                  # ~90 s: rebuild data/eatclub.db (website + app API + live deals)
+bun run walk -33.8688 151.2093 --max 10       # <0.1 s: walking times from a point → walk_times (local, offline)
 bun run sql "SELECT count(*) FROM venues"     # read-only SQL; TSV out, --json for JSON, or SQL on stdin
+bun run live <slug> [slug…]                   # ~1 s: today's live deal state for just these venues
 ```
 
-Run commands from the repo root. Check freshness with `SELECT * FROM meta`:
-- `synced_at`: when venues, menus and the weekly deal schedule were last rebuilt.
-- `live_fetched_at`: when today's live deal state was last fetched.
+Run commands from the repo root. A question takes three steps:
 
-Data only updates when someone runs these commands. For "right now" questions, run `bun run live` first if
-`live_fetched_at` is more than ~30 min old. Run `bun run sync` if `synced_at` is more than a few days old.
+1. `walk` from the user's location.
+2. `sql` to shortlist venues using the weekly `deals` schedule, menus and `walk_times`.
+3. `live` on the 3–10 venues you'll recommend, then read their `live_deals` (deals left, terms, exclusions).
+
+Don't run `bun run live` with no arguments; it refreshes every venue in NSW (~45 s).
+`meta.synced_at` says when venues, menus and the schedule were last rebuilt. Run `bun run sync` if it's more than a few days old.
 
 ## Schema
 
@@ -62,8 +65,9 @@ One row per venue.
 `all_day = 1` deals are valid all opening hours and expanded into one row per shift, so a `deal_id` can repeat.
 
 ### live_deals: today's state from the app
-One row per deal available today, fetched by `bun run live`. It covers the weekly schedule plus one-off and
-lightning deals the app lists for today that never appear in `deals`, so **for today, query `live_deals` directly**.
+One row per deal available today, fetched by `bun run live <slug…>` (and for every venue by `sync`). It covers the
+weekly schedule plus one-off and lightning deals the app lists for today that never appear in `deals`, so once you've
+run `live` on your shortlist, **read today's deals for those venues from `live_deals`**. Check `fetched_at`.
 Use `deals` for other days. `deal_id` matches `deals.deal_id`. `start_min = 0, end_min = 1440` means all day
 during opening hours; check `hours`.
 
@@ -93,9 +97,10 @@ for add-ons, sizes and dietary swaps like gluten free).
 `slug`, `date`, `stars`, `message`, `reviewer`, `deal_used`. Recent diner reviews (up to ~10 per venue).
 
 ### walk_times
-`slug`, `minutes`, `meters` along OpenStreetMap footpaths from the last `bun run walk` origin (`meta.walk_origin`).
-Each run replaces the table. SQLite math functions (`sin`, `cos`, `acos`, `radians`) are available for straight-line distance,
-but walking time should come from `walk_times`.
+`slug`, `minutes`, `meters` along OpenStreetMap streets and footpaths from the last `bun run walk` origin
+(`meta.walk_origin`), at 4.8 km/h. Each run replaces the table. Walk time doesn't include waiting at crossings,
+so add a minute or two for busy roads. SQLite math functions (`sin`, `cos`, `acos`, `radians`) are available for
+straight-line distance, but walking time should come from `walk_times`.
 
 ### regions, meta
 `regions`: `slug`, `name`, `state`, `timezone`, `venue_count`.
@@ -103,21 +108,29 @@ but walking time should come from `walk_times`.
 
 ## Recipes
 
-Venues within a 10 min walk with a deal still available at 12:30 today:
+Shortlist venues within a 10 min walk with a scheduled deal at 12:30 on Tuesday (day 2):
 
 ```sh
-bun run live    # if meta.live_fetched_at is stale
 bun run walk -33.8688 151.2093 --max 10
 bun run sql "
-SELECT v.name, w.minutes AS walk, l.discount, l.subheading,
-       printf('%02d:%02d-%02d:%02d', l.start_min/60, l.start_min%60, l.end_min/60, l.end_min%60) AS deal_window,
-       l.qty_left, l.max_party_size, v.rating, v.app_link
-FROM walk_times w JOIN venues v USING (slug) JOIN live_deals l USING (slug)
-WHERE 750 >= l.start_min AND 750 < l.end_min AND l.qty_left > 0
-ORDER BY w.minutes"
+SELECT v.slug, v.name, w.minutes AS walk, d.discount, d.type,
+       printf('%02d:%02d-%02d:%02d', d.start_min/60, d.start_min%60, d.end_min/60, d.end_min%60) AS deal_window,
+       v.rating, v.dining_type
+FROM walk_times w JOIN venues v USING (slug) JOIN deals d USING (slug)
+WHERE d.day = 2 AND 750 >= d.start_min AND 750 < d.end_min
+ORDER BY d.discount_pct DESC, w.minutes"
 ```
 
-For another day, use `deals` with `day = <1-7>` instead of `live_deals`.
+Then confirm today's live state for the ones you'll recommend:
+
+```sh
+bun run live restaurant-leo margot-osteria uccello
+bun run sql "
+SELECT v.name, l.discount, l.qty_left, l.subheading, l.max_party_size, l.terms, v.app_link,
+       (SELECT group_concat(category, '; ') FROM discount_exclusions x WHERE x.slug = v.slug) AS excluded
+FROM live_deals l JOIN venues v USING (slug)
+WHERE l.slug IN ('restaurant-leo','margot-osteria','uccello') AND l.qty_left > 0"
+```
 
 Dishes mentioning beef or lamb at those venues:
 
@@ -153,8 +166,12 @@ cuisines; keyword search only narrows things down.
   - `excluded-items`: per-venue discount exclusions
   
   Set `EATCLUB_APP_API_KEY` in `.env`. To recover it, decompile the APK with jadx and read `res/ju.json` → `AppSync.Default.ApiKey`.
-- **Walking**: OSRM `table` API on the FOSSGIS public foot router (`routing.openstreetmap.de`, ~4.5 km/h). Set `OSRM_FOOT_URL`
-  to use your own router.
+- **Walking**: a local walking network built once by `bun run map` from OpenStreetMap
+  (`data/osm/australia-latest.osm.pbf` from https://download.geofabrik.de/australia-oceania.html). It keeps walkable
+  streets and paths in the Newcastle–Sydney–Wollongong box (`EATCLUB_MAP_BBOX`) and writes `data/walk-graph.bin`
+  (~85 MB, 2.9M nodes; ~25 s to build). `walk` loads it and runs Dijkstra in-process, with no network calls.
+  The 1 GB extract can be deleted afterwards. To rebuild with fresh streets:
+  `curl -o data/osm/australia-latest.osm.pbf https://download.geofabrik.de/australia-oceania/australia-latest.osm.pbf && bun run map`.
 
 `sync` builds into `data/eatclub.db.tmp` and renames it over the old DB when finished. `EATCLUB_DB` overrides the
 path. `EATCLUB_STATES` (default `NSW`, comma-separated) picks the states to sync.

@@ -232,7 +232,8 @@ await Promise.all([
     // The website filter takes the display name; hyphenated slugs 500.
     const venues = await fetchAllVenues(r.region);
     for (const v of venues) {
-      if (seen.has(v.slug)) continue;
+      // A region's listing can include venues from other states (e.g. "Sydney" returns some in VIC/QLD).
+      if (seen.has(v.slug) || !STATES.includes((v.state ?? "").toUpperCase())) continue;
       seen.add(v.slug);
       listed.push({ region: r.slug, v });
     }
@@ -262,6 +263,8 @@ await mapLimit(listed, 12, async ({ region, v }) => {
       : null,
   ]);
   if (!page) failed++;
+  // The venue page is more authoritative than the listing about which state a venue is in.
+  if (page && !STATES.includes((page.detail.venue.state ?? "").toUpperCase())) return;
   pending.push(
     ...venueStatements({
       region,

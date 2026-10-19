@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Fills `walk_times` with OpenStreetMap walking times from a point to every venue
- * reachable within --max minutes (default 15), so SQL can JOIN on it.
+ * Fills `walk_times` with walking times from a point to every venue within --max minutes
+ * (default 15), using the local OpenStreetMap walking network (data/walk-graph.bin). No network calls.
  */
 import { open } from "./db.ts";
-import { walkingTimes } from "./osm.ts";
+import { dijkstra, haversine, loadGraph, nearestNode, WALK_METERS_PER_MIN } from "./graph.ts";
 
 const [latArg, lngArg, ...rest] = Bun.argv.slice(2);
 const latitude = Number(latArg);
@@ -16,35 +16,42 @@ if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !(max > 0)) {
   process.exit(2);
 }
 
-// Nobody walks faster than 6 km/h, and a route is never shorter than the straight line,
-// so this shortlist can't miss a reachable venue.
-const crow = max * 100;
-const dLat = crow / 111_320;
-const dLng = crow / (111_320 * Math.cos((latitude * Math.PI) / 180));
+const limit = max * WALK_METERS_PER_MIN;
+const [graph, db] = [await loadGraph(), open()];
+const start = nearestNode(graph, latitude, longitude);
+if (!start) {
+  console.error(`no walkable path within ~400 m of ${latitude},${longitude} (outside the map area?)`);
+  process.exit(1);
+}
+const dist = dijkstra(graph, start.node, limit);
 
-const db = open();
+// Straight-line prefilter: nothing farther than the walking limit can be reachable.
+const dLat = limit / 111_320;
+const dLng = limit / (111_320 * Math.cos((latitude * Math.PI) / 180));
 const { rows } = await db.execute({
-  sql: `SELECT slug, latitude, longitude FROM venues
-        WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?`,
+  sql: "SELECT slug, latitude, longitude FROM venues WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?",
   args: [latitude - dLat, latitude + dLat, longitude - dLng, longitude + dLng],
 });
-const venues = rows.map((r) => ({
-  slug: String(r.slug),
-  latitude: Number(r.latitude),
-  longitude: Number(r.longitude),
-}));
 
-const walks = await walkingTimes({ latitude, longitude }, venues);
-const reachable = venues
-  .map((v, i) => ({ slug: v.slug, walk: walks[i] }))
-  .filter((v) => v.walk && v.walk.seconds <= max * 60);
+const reachable: { slug: string; meters: number }[] = [];
+for (const r of rows) {
+  const vLat = Number(r.latitude);
+  const vLng = Number(r.longitude);
+  const end = nearestNode(graph, vLat, vLng);
+  if (!end) continue;
+  // Path along the network plus the short hops from the exact points onto it.
+  const meters = start.meters + (dist[end.node] as number) + end.meters;
+  if (meters <= limit || haversine(latitude, longitude, vLat, vLng) < 60) {
+    reachable.push({ slug: String(r.slug), meters: Number.isFinite(meters) ? meters : 0 });
+  }
+}
 
 await db.batch(
   [
     "DELETE FROM walk_times",
-    ...reachable.map((v) => ({
+    ...reachable.map((r) => ({
       sql: "INSERT INTO walk_times VALUES (?,?,?)",
-      args: [v.slug, Math.round((v.walk?.seconds ?? 0) / 6) / 10, Math.round(v.walk?.meters ?? 0)],
+      args: [r.slug, Math.round((r.meters / WALK_METERS_PER_MIN) * 10) / 10, Math.round(r.meters)],
     })),
     {
       sql: "INSERT OR REPLACE INTO meta VALUES ('walk_origin', ?)",

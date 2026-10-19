@@ -37,8 +37,11 @@ describe("eatclub db", () => {
   });
 
   test("walk + full-text menu search finds beef or lamb nearby", async () => {
+    const started = performance.now();
     const walk = await run("src/walk.ts", ...SYDNEY_CBD, "--max", "10");
     expect(walk.code).toBe(0);
+    // Routing is local: a whole walk query, process start included, stays well under 2 s.
+    expect(performance.now() - started).toBeLessThan(2000);
     expect(walk.out).toMatch(/walk_times: \d+ venues within 10 min/);
     const rows = await sql(`SELECT DISTINCT v.name, w.minutes, m.category, m.title, m.description
       FROM menu_fts f JOIN menu_items m ON m.id = f.rowid
@@ -49,6 +52,27 @@ describe("eatclub db", () => {
       expect(Number(r.minutes)).toBeLessThanOrEqual(10);
       expect(`${r.category} ${r.title} ${r.description}`.toLowerCase()).toMatch(/beef|lamb/);
     }
+  });
+
+  test("walk times grow with distance and stay realistic", async () => {
+    await run("src/walk.ts", "-33.8834", "151.2005", "--max", "30");
+    const [r] = await sql(`WITH o(lat,lng) AS (VALUES(-33.8834,151.2005)),
+      r AS (SELECT w.minutes, w.meters / (6371000*acos(min(1, sin(radians(o.lat))*sin(radians(v.latitude))
+        + cos(radians(o.lat))*cos(radians(v.latitude))*cos(radians(v.longitude-o.lng))))) ratio
+        FROM walk_times w JOIN venues v USING (slug), o)
+      SELECT count(*) n, max(minutes) maxmin, avg(ratio) avg FROM r WHERE ratio < 100`);
+    expect(Number(r?.n)).toBeGreaterThan(200);
+    expect(Number(r?.maxmin)).toBeLessThanOrEqual(30);
+    // Street routes are longer than straight lines, but not wildly.
+    expect(Number(r?.avg)).toBeWithin(1.1, 1.8);
+  });
+
+  test("live refreshes just the named venues", async () => {
+    const before = await sql("SELECT max(fetched_at) t FROM live_deals WHERE slug <> 'bar-bruno'");
+    const r = await run("src/live.ts", "bar-bruno");
+    expect(r.code).toBe(0);
+    const after = await sql("SELECT max(fetched_at) t FROM live_deals WHERE slug <> 'bar-bruno'");
+    expect(after[0]?.t).toBe(before[0]?.t);
   });
 
   test("venues carry website, app and review data", async () => {

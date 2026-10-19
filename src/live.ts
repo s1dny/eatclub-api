@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Refreshes today's live deal state from the app API: quantity left, terms, party size, and the
- * items each venue excludes from its discount today. ~1 min for NSW. Run before "right now" questions.
+ * Today's live deal state from the app API: quantity left, terms, party size, and the items each
+ * venue excludes from its discount today.
+ *
+ *   bun run live <slug> [slug…]   ~1 s: just the venues you're about to recommend
+ *   bun run live                  ~45 s: every venue (sync runs this)
  */
 import type { Client, InStatement } from "@libsql/client";
 import { excludedItems, liveDeal } from "./app.ts";
@@ -10,10 +13,17 @@ import { localDate, localWeekday, log, mapLimit } from "./util.ts";
 
 const bool = (v: unknown) => (typeof v === "boolean" ? (v ? 1 : 0) : null);
 
-export async function refreshLive(db: Client): Promise<void> {
+/** Refreshes every venue, or only `slugs` (leaving other venues' live rows alone). */
+export async function refreshLive(db: Client, slugs?: string[]): Promise<void> {
   const fetchedAt = new Date().toISOString();
   const { rows: zones } = await db.execute("SELECT DISTINCT timezone FROM venues");
-  const statements: InStatement[] = ["DELETE FROM live_deals", "DELETE FROM discount_exclusions"];
+  const scope = slugs ? new Set(slugs) : null;
+  const statements: InStatement[] = scope
+    ? [...scope].flatMap((slug) => [
+        { sql: "DELETE FROM live_deals WHERE slug = ?", args: [slug] },
+        { sql: "DELETE FROM discount_exclusions WHERE slug = ?", args: [slug] },
+      ])
+    : ["DELETE FROM live_deals", "DELETE FROM discount_exclusions"];
   let deals = 0;
   let venues = 0;
 
@@ -22,7 +32,7 @@ export async function refreshLive(db: Client): Promise<void> {
     const date = localDate(tz);
     // Today's deals: the website's weekly schedule plus the app's list for today, which also
     // carries one-off deals that never appear in the schedule.
-    const { rows } = await db.execute({
+    const { rows: all } = await db.execute({
       sql: `SELECT d.deal_id, d.slug, v.id AS venue_id, v.excluded_item_count FROM deals d JOIN venues v USING (slug)
               WHERE v.timezone = ?1 AND d.day = ?2
             UNION
@@ -31,6 +41,7 @@ export async function refreshLive(db: Client): Promise<void> {
               WHERE v.timezone = ?1 AND json_valid(json_extract(v.app_json, '$.recentDeals'))`,
       args: [tz, localWeekday(tz)],
     });
+    const rows = scope ? all.filter((r) => scope.has(String(r.slug))) : all;
 
     await mapLimit(rows, 12, async (r) => {
       const d = await liveDeal(String(r.deal_id)).catch(() => null);
@@ -92,13 +103,14 @@ export async function refreshLive(db: Client): Promise<void> {
     });
   }
 
-  statements.push({ sql: "INSERT OR REPLACE INTO meta VALUES ('live_fetched_at', ?)", args: [fetchedAt] });
+  if (!scope) statements.push({ sql: "INSERT OR REPLACE INTO meta VALUES ('live_fetched_at', ?)", args: [fetchedAt] });
   await db.batch(statements, "write");
-  log(`live: ${deals} deals today, exclusions at ${venues} venues`);
+  log(`live: ${deals} deals today${scope ? ` at ${scope.size} venues` : ""}, exclusions at ${venues} venues`);
 }
 
 if (import.meta.main) {
+  const slugs = Bun.argv.slice(2);
   const db = open();
-  await refreshLive(db);
+  await refreshLive(db, slugs.length ? slugs : undefined);
   db.close();
 }
