@@ -1,0 +1,40 @@
+query DealForId($dealId: String!) {
+  dealForId(dealId: $dealId) {
+    __typename
+    objectId
+    created
+    lastUpdated
+    restId
+    enabled
+    discount
+    discountExt
+    recurring
+    startTime
+    endTime
+    startDate
+    endDate
+    dayOfWeek
+    displayedQtyLeft
+    recurringQty
+    lastBookingDate
+    customDiscount
+    iaoOnly
+    dineInOnly
+    lightning
+    takeawayOnly
+    stunt
+    maxPartySize
+    subheading
+    terms
+    drinksOnlyTerms
+    subsidyIds
+    newCustOnly
+    additionalImportantInfo {
+      __typename
+      iconLink
+      heading
+      text
+    }
+    sellsOutEarly
+  }
+}

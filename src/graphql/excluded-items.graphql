@@ -1,0 +1,3 @@
+query ExcludedItems($restId: String!, $date: String!) {
+  excludedItems(restId: $restId, date: $date)
+}

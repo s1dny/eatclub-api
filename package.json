@@ -1,22 +1,21 @@
 {
   "name": "eatclub-api",
   "version": "0.1.0",
-  "description": "MCP server + HTTP API for EatClub restaurant deals and menus",
+  "description": "EatClub NSW venues, deals, live availability and menus in a libSQL database for agents to query",
   "type": "module",
   "private": true,
-  "bin": {
-    "eatclub-mcp": "src/stdio.ts"
-  },
   "scripts": {
-    "mcp": "bun src/stdio.ts",
-    "serve": "bun src/http.ts",
-    "test": "bun test --timeout 180000",
+    "sync": "bun src/sync.ts",
+    "live": "bun src/live.ts",
+    "walk": "bun src/walk.ts",
+    "sql": "bun src/sql.ts",
+    "test": "bun test --timeout 120000",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "fix": "biome check --write ."
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@libsql/client": "^0.18.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

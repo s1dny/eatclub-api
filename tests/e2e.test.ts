@@ -1,99 +1,81 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { DB_PATH } from "../src/db.ts";
 
-// Live end-to-end checks against eatclub.com.au and OpenStreetMap routing.
-const SYDNEY_CBD = { latitude: -33.8688, longitude: 151.2093 };
+// Runs the CLIs the agent uses against the synced DB (`bun run sync` first) and live OSM routing.
 const root = new URL("..", import.meta.url).pathname;
+const SYDNEY_CBD = ["-33.8688", "151.2093"];
 
-type Nearby = {
-  region: string;
-  walkSource: string;
-  venues: { slug: string; walkMinutes: number; menu?: string; menuMatches?: number; dealsToday: string[] }[];
+async function run(...args: string[]) {
+  const proc = Bun.spawn(["bun", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { out, err, code };
+}
+
+const sql = async (query: string) => {
+  const r = await run("src/sql.ts", "--json", query);
+  expect(r.code).toBe(0);
+  return JSON.parse(r.out) as Record<string, unknown>[];
 };
 
-const text = (r: unknown) => (r as { content: { text: string }[] }).content[0]?.text ?? "";
-
-describe("stdio MCP", () => {
-  const client = new Client({ name: "e2e", version: "0" });
-  beforeAll(() =>
-    client.connect(new StdioClientTransport({ command: "bun", args: ["src/stdio.ts"], cwd: root, stderr: "inherit" })),
-  );
-  afterAll(() => client.close());
-
-  test("lists tools", async () => {
-    const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["find_venues_nearby", "get_venue", "list_regions"]);
+describe("eatclub db", () => {
+  beforeAll(() => {
+    if (!existsSync(DB_PATH)) throw new Error(`no database at ${DB_PATH}; run \`bun run sync\``);
   });
 
-  test("finds beef or lamb within a 10 minute walk, with menus", async () => {
-    const res: Nearby = JSON.parse(
-      text(
-        await client.callTool({
-          name: "find_venues_nearby",
-          arguments: { ...SYDNEY_CBD, walkMinutes: 10, menuKeywords: ["beef", "lamb"], limit: 10 },
-        }),
-      ),
-    );
-    expect(res.region).toBe("sydney");
-    expect(res.walkSource).toBe("osm");
-    expect(res.venues.length).toBeGreaterThan(0);
-    for (const v of res.venues) {
-      expect(v.walkMinutes).toBeLessThanOrEqual(10);
-      expect(v.menuMatches).toBeGreaterThan(0);
-      expect(v.menu?.toLowerCase()).toMatch(/beef|lamb/);
+  test("is populated", async () => {
+    const [counts] = await sql(`SELECT (SELECT count(*) FROM venues) v, (SELECT count(*) FROM deals) d,
+      (SELECT count(*) FROM menu_items) m, (SELECT count(*) FROM regions) r`);
+    expect(Number(counts?.v)).toBeGreaterThan(2000);
+    expect(Number(counts?.d)).toBeGreaterThan(5000);
+    expect(Number(counts?.m)).toBeGreaterThan(50000);
+    expect(Number(counts?.r)).toBe(3);
+  });
+
+  test("walk + full-text menu search finds beef or lamb nearby", async () => {
+    const walk = await run("src/walk.ts", ...SYDNEY_CBD, "--max", "10");
+    expect(walk.code).toBe(0);
+    expect(walk.out).toMatch(/walk_times: \d+ venues within 10 min/);
+    const rows = await sql(`SELECT DISTINCT v.name, w.minutes, m.category, m.title, m.description
+      FROM menu_fts f JOIN menu_items m ON m.id = f.rowid
+      JOIN walk_times w ON w.slug = m.slug JOIN venues v ON v.slug = m.slug
+      WHERE menu_fts MATCH 'beef OR lamb' ORDER BY w.minutes`);
+    expect(rows.length).toBeGreaterThan(10);
+    for (const r of rows) {
+      expect(Number(r.minutes)).toBeLessThanOrEqual(10);
+      expect(`${r.category} ${r.title} ${r.description}`.toLowerCase()).toMatch(/beef|lamb/);
     }
-    const minutes = res.venues.map((v) => v.walkMinutes);
-    expect(minutes).toEqual([...minutes].sort((a, b) => a - b));
   });
 
-  test("gets a venue's weekly deals and menu", async () => {
-    const venue = JSON.parse(text(await client.callTool({ name: "get_venue", arguments: { slug: "ca-de-vin" } })));
-    expect(venue.name).toBe("Ca De Vin");
-    expect(venue.weekly).toHaveLength(7);
-    expect(venue.weekly.flatMap((d: { deals: string[] }) => d.deals).join(" ")).toMatch(/% Off/);
-    expect(venue.menu).toContain("Garlic Bread");
-  });
-});
-
-describe("HTTP API", () => {
-  const port = 39_000 + Math.floor(Math.random() * 1000);
-  const base = `http://localhost:${port}`;
-  let proc: ReturnType<typeof Bun.spawn>;
-
-  beforeAll(async () => {
-    proc = Bun.spawn(["bun", "src/http.ts"], { cwd: root, env: { ...process.env, PORT: String(port) } });
-    for (let i = 0; i < 50; i++) {
-      if (
-        await fetch(`${base}/health`).then(
-          (r) => r.ok,
-          () => false,
-        )
-      )
-        return;
-      await Bun.sleep(100);
-    }
-    throw new Error("server did not start");
-  });
-  afterAll(() => proc.kill());
-
-  test("GET /venues/nearby", async () => {
-    const res = await fetch(`${base}/venues/nearby?lat=${SYDNEY_CBD.latitude}&lng=${SYDNEY_CBD.longitude}&limit=3`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Nearby;
-    expect(body.venues.length).toBe(3);
+  test("venues carry website, app and review data", async () => {
+    const [v] = await sql(`SELECT count(*) n, count(bio) bio, count(dining_type) dining, count(food_rating) food,
+      (SELECT count(*) FROM reviews) reviews, (SELECT count(*) FROM menu_items WHERE options IS NOT NULL) options
+      FROM venues`);
+    // Only some venues have bios on EatClub; the rest are common.
+    expect(Number(v?.bio)).toBeGreaterThan(100);
+    for (const k of ["dining", "food", "reviews", "options"]) expect(Number(v?.[k])).toBeGreaterThan(500);
   });
 
-  test("GET /venues/nearby rejects bad input", async () => {
-    expect((await fetch(`${base}/venues/nearby?lat=nope&lng=1`)).status).toBe(400);
+  test("today's deals have live availability", async () => {
+    const [l] = await sql(`SELECT count(*) n, count(qty_left) qty, count(subheading) sub,
+      (SELECT count(*) FROM deals d JOIN live_deals USING (deal_id)) joined FROM live_deals`);
+    expect(Number(l?.n)).toBeGreaterThan(500);
+    expect(Number(l?.qty)).toBe(Number(l?.n));
+    expect(Number(l?.joined)).toBeGreaterThan(0);
   });
 
-  test("MCP over streamable HTTP", async () => {
-    const client = new Client({ name: "e2e-http", version: "0" });
-    await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
-    const regions = JSON.parse(text(await client.callTool({ name: "list_regions", arguments: {} })));
-    expect(regions.map((r: { slug: string }) => r.slug)).toContain("melbourne");
-    await client.close();
+  test("a venue's weekly deal days are ISO weekdays", async () => {
+    const deals = await sql("SELECT day FROM deals");
+    for (const d of deals) expect(Number(d.day)).toBeWithin(1, 8);
+  });
+
+  test("sql is read-only", async () => {
+    const r = await run("src/sql.ts", "DELETE FROM venues");
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/readonly|read-only|query_only/i);
   });
 });

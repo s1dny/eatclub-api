@@ -15,7 +15,7 @@ export const Region = z.object({
 });
 export type Region = z.infer<typeof Region>;
 
-export const VenueSummary = z.object({
+export const VenueSummary = z.looseObject({
   objectId: z.string(),
   slug: z.string(),
   name: z.string(),
@@ -28,6 +28,13 @@ export const VenueSummary = z.object({
   postcode: z.string().nullish(),
   phone: z.string().nullish(),
   cuisines: z.array(z.string()).nullish(),
+  venueTypes: z.array(z.string()).nullish(),
+  occasions: z.array(z.string()).nullish(),
+  imageLink: z.string().nullish(),
+  otherImages: z.array(z.string()).nullish(),
+  bioLink: z.string().nullish(),
+  promo: z.unknown().nullish(),
+  ecPayEnabled: z.boolean().nullish(),
   latitude: z.number(),
   longitude: z.number(),
   maxDiscount: z.string().nullish(),
@@ -66,13 +73,18 @@ const Choice = z.object({ choiceTitle: z.string(), price: z.number().nullish() }
 const Option = z.object({
   optionTitle: z.string(),
   mandatory: z.boolean().nullish(),
+  minSelections: z.number().nullish(),
+  maxSelections: z.number().nullish(),
   choices: z.array(Choice).nullish(),
 });
 const Product = z.object({
+  objectId: z.string().nullish(),
   productTitle: z.string(),
   productDescription: z.string().nullish(),
+  imageLink: z.string().nullish(),
   price: z.number().nullish(),
   noDiscount: z.boolean().nullish(),
+  popularity: z.number().nullish(),
   disableDate: z.unknown().nullish(),
   disableUntilDate: z.unknown().nullish(),
   options: z.array(Option).nullish(),
@@ -91,6 +103,9 @@ export const Menu = z.object({
     .transform((t) => t ?? "all"),
   menuTitle: z.string().nullish(),
   menuDescription: z.string().nullish(),
+  /** Minutes past local midnight; -1 = all day. */
+  startTime: z.number().nullish(),
+  endTime: z.number().nullish(),
   categories: z.array(Category).nullish(),
 });
 export type Menu = z.infer<typeof Menu>;
@@ -99,7 +114,16 @@ export const VenueDetail = z.object({
   venue: VenueSummary,
   deals: z.array(Deal).nullish(),
   menuData: z.array(Menu).nullish(),
-  ratings: z.object({ numRatings: z.number().nullish(), aveRating: z.number().nullish() }).nullish(),
+  ratings: z
+    .object({
+      numRatings: z.number().nullish(),
+      aveRating: z.number().nullish(),
+      aveFoodRating: z.number().nullish(),
+      aveAtmosphereRating: z.number().nullish(),
+      /** Each review is a JSON string. */
+      ratings: z.array(z.string()).nullish(),
+    })
+    .nullish(),
 });
 export type VenueDetail = z.infer<typeof VenueDetail>;
 
@@ -163,23 +187,49 @@ export async function fetchAllVenues(region: string, concurrency = 8): Promise<V
  * Deals and menus only exist in the venue page's React Server Components payload.
  * Each RSC line is `<id>:<json>`; we look for the props object carrying `menuData`.
  */
-export async function fetchVenueDetail(slug: string): Promise<VenueDetail> {
+export async function fetchVenueDetail(slug: string): Promise<{ detail: VenueDetail; raw: unknown }> {
   const res = await request(`/venue/${encodeURIComponent(slug)}`, { headers: { rsc: "1" } });
-  const rows = new Map<string, unknown>();
-  for (const line of (await res.text()).split("\n")) {
-    const colon = line.indexOf(":");
-    const json = line.slice(colon + 1);
-    if (colon > 0 && (json.startsWith("[") || json.startsWith("{"))) {
-      try {
-        rows.set(line.slice(0, colon), JSON.parse(json));
-      } catch {}
-    }
-  }
+  const rows = parseRsc(new Uint8Array(await res.arrayBuffer()));
   for (const row of rows.values()) {
     const found = findProps(row);
-    if (found) return VenueDetail.parse(resolveRefs(found, rows));
+    if (found) {
+      const { children: _, ...raw } = resolveRefs(found, rows) as Record<string, unknown>;
+      return { detail: VenueDetail.parse(raw), raw };
+    }
   }
   throw new Error(`No venue data on /venue/${slug}`);
+}
+
+/**
+ * RSC rows are `<hexId>:<json>\n`, except text rows `<hexId>:T<hexByteLength>,<raw text>` whose
+ * text may contain newlines, so they must be read by byte length.
+ */
+function parseRsc(bytes: Uint8Array): Map<string, unknown> {
+  const rows = new Map<string, unknown>();
+  const decoder = new TextDecoder();
+  let i = 0;
+  while (i < bytes.length) {
+    const colon = bytes.indexOf(0x3a, i);
+    if (colon < 0) break;
+    const id = decoder.decode(bytes.subarray(i, colon));
+    if (bytes[colon + 1] === 0x54 /* T */) {
+      const comma = bytes.indexOf(0x2c, colon);
+      const len = Number.parseInt(decoder.decode(bytes.subarray(colon + 2, comma)), 16);
+      rows.set(id, decoder.decode(bytes.subarray(comma + 1, comma + 1 + len)));
+      i = comma + 1 + len;
+      continue;
+    }
+    let end = bytes.indexOf(0x0a, colon);
+    if (end < 0) end = bytes.length;
+    const body = decoder.decode(bytes.subarray(colon + 1, end));
+    try {
+      rows.set(id, JSON.parse(body));
+    } catch {
+      rows.set(id, body);
+    }
+    i = end + 1;
+  }
+  return rows;
 }
 
 function findProps(node: unknown): unknown {
@@ -199,16 +249,20 @@ function findProps(node: unknown): unknown {
 }
 
 /**
- * RSC dedupes repeated objects into `"$<row>:<path>"` strings; inline them.
+ * RSC dedupes repeated objects into `"$<row>"` / `"$<row>:<path>"` strings; inline them.
+ * Literal strings starting with "$" are escaped as "$$".
  * A path walks from the row's root, where `props` on a `["$", type, key, props]` element is index 3.
  */
 function resolveRefs(node: unknown, rows: Map<string, unknown>, depth = 0): unknown {
   if (depth > 50) return node;
   if (typeof node === "string") {
-    const ref = /^\$([0-9a-f]+):(.+)$/.exec(node);
-    if (!ref?.[1] || !ref[2] || !rows.has(ref[1])) return node;
+    if (node.startsWith("$$")) return node.slice(1); // escaped literal "$"
+    const ref = /^\$([0-9a-f]+)(?::(.+))?$/.exec(node);
+    if (!ref?.[1] || !rows.has(ref[1])) return node;
     let target: unknown = rows.get(ref[1]);
-    for (const seg of ref[2].split(":")) {
+    for (const seg of ref[2]?.split(":") ?? []) {
+      // A path can pass through another ref; follow it before stepping in.
+      if (typeof target === "string" && target.startsWith("$")) target = resolveRefs(target, rows, depth + 1);
       if (Array.isArray(target) && target[0] === "$" && seg === "props") target = target[3];
       else target = (target as Record<string, unknown> | undefined)?.[seg];
     }
