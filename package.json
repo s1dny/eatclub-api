@@ -1,0 +1,27 @@
+{
+  "name": "eatclub-api",
+  "version": "0.1.0",
+  "description": "MCP server + HTTP API for EatClub restaurant deals and menus",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "eatclub-mcp": "src/stdio.ts"
+  },
+  "scripts": {
+    "mcp": "bun src/stdio.ts",
+    "serve": "bun src/http.ts",
+    "test": "bun test --timeout 180000",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@types/bun": "^1.4.3",
+    "typescript": "^7.0.2"
+  }
+}
