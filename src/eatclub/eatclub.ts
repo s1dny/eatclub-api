@@ -3,7 +3,7 @@ import { z } from "zod";
 /** Thin client for the public JSON + RSC endpoints behind eatclub.com.au/venues. */
 
 const BASE = process.env.EATCLUB_BASE_URL ?? "https://eatclub.com.au";
-const UA = "eatclub-api/0.1 (+https://github.com/s1dny/eatclub-api)";
+const UA = "skills/0.1 (+https://git.aza.network/aiden/skills)";
 
 const Envelope = z.object({ status: z.string(), error: z.string().nullable(), data: z.unknown() });
 
@@ -165,7 +165,7 @@ export const fetchVenuePage = (region: string, page: number) =>
     body: JSON.stringify({ region }),
   });
 
-/** Every venue in a region. The endpoint is slow (~3s/page), so pages are fetched in parallel. */
+/** Every venue in a region. Pages are fetched in parallel. */
 export async function fetchAllVenues(region: string, concurrency = 8): Promise<VenueSummary[]> {
   const first = await fetchVenuePage(region, 1);
   const pages = Math.ceil(first.totalResults / first.pageSize);

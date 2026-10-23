@@ -10,7 +10,7 @@ const query = (name: string) => Bun.file(new globalThis.URL(`./graphql/${name}.g
 
 function apiKey(): string {
   const key = process.env.EATCLUB_APP_API_KEY;
-  if (!key) throw new Error("EATCLUB_APP_API_KEY is not set (see README: Live app data)");
+  if (!key) throw new Error("EATCLUB_APP_API_KEY is not set; see skills/eatclub/references/api.md");
   return key;
 }
 

@@ -2,9 +2,6 @@
 /**
  * Today's live deal state from the app API: quantity left, terms, party size, and the items each
  * venue excludes from its discount today.
- *
- *   bun run live <slug> [slug…]   ~1 s: just the venues you're about to recommend
- *   bun run live                  ~45 s: every venue (sync runs this)
  */
 import type { Client, InStatement } from "@libsql/client";
 import { excludedItems, liveDeal } from "./app.ts";
@@ -110,7 +107,18 @@ export async function refreshLive(db: Client, slugs?: string[]): Promise<void> {
 
 if (import.meta.main) {
   const slugs = Bun.argv.slice(2);
+  if (!slugs.length) {
+    console.error("usage: bun run eatclub live <slug> [slug…]");
+    process.exit(2);
+  }
   const db = open();
-  await refreshLive(db, slugs.length ? slugs : undefined);
+  await refreshLive(db, slugs);
+  const placeholders = slugs.map(() => "?").join(",");
+  const deals = await db.execute({ sql: `SELECT * FROM live_deals WHERE slug IN (${placeholders})`, args: slugs });
+  const exclusions = await db.execute({
+    sql: `SELECT * FROM discount_exclusions WHERE slug IN (${placeholders})`,
+    args: slugs,
+  });
+  console.log(JSON.stringify({ slugs, deals: deals.rows, exclusions: exclusions.rows }));
   db.close();
 }

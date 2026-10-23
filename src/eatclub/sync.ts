@@ -298,6 +298,9 @@ await db.batch(
 );
 log(`static: ${listed.length} venues (${failed} without deals/menus)`);
 await refreshLive(db);
+const meta = await db.execute("SELECT key, value FROM meta");
 db.close();
 await rename(tmp, DB_PATH);
 log(`done → ${DB_PATH}`);
+
+console.log(JSON.stringify({ database: DB_PATH, meta: Object.fromEntries(meta.rows.map((r) => [r.key, r.value])) }));

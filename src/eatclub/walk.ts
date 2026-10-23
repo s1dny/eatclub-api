@@ -12,7 +12,7 @@ const longitude = Number(lngArg);
 const maxIdx = rest.indexOf("--max");
 const max = maxIdx >= 0 ? Number(rest[maxIdx + 1]) : 15;
 if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !(max > 0)) {
-  console.error("usage: bun run walk <lat> <lng> [--max minutes]");
+  console.error("usage: bun run eatclub walk <lat> <lng> [--max minutes]");
   process.exit(2);
 }
 
@@ -60,4 +60,8 @@ await db.batch(
   ],
   "write",
 );
-console.log(`walk_times: ${reachable.length} venues within ${max} min walk of ${latitude},${longitude}`);
+const result = await db.execute("SELECT slug, minutes, meters FROM walk_times ORDER BY minutes, slug");
+console.log(
+  JSON.stringify({ origin: { latitude, longitude }, maxMinutes: max, count: result.rows.length, venues: result.rows }),
+);
+db.close();

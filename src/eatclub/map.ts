@@ -4,7 +4,7 @@
  * Keeps walkable ways inside the bounding box (default Newcastle–Sydney–Wollongong) and the
  * connected pieces of the network big enough to matter.
  *
- *   bun run map [path/to/extract.osm.pbf]    (default data/osm/australia-latest.osm.pbf)
+ *   bun run eatclub map [path/to/extract.osm.pbf]    (default data/osm/australia-latest.osm.pbf)
  */
 import { createOSMStream } from "osm-pbf-parser-node";
 import { encodeGraph, GRAPH_PATH, haversine } from "./graph.ts";
@@ -217,3 +217,5 @@ for (let i = 0; i < N; i++) {
 await Bun.write(GRAPH_PATH, encodeGraph({ lat, lng, offsets, targets, meters }));
 const big = sizes.filter((s) => s >= MIN_COMPONENT).length;
 log(`wrote ${GRAPH_PATH}: ${n} nodes, ${m / 2} edges, ${big} components ≥ ${MIN_COMPONENT} nodes`);
+
+console.log(JSON.stringify({ path: GRAPH_PATH, nodes: n, edges: m / 2, components: big }));

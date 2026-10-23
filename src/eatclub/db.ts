@@ -9,7 +9,7 @@ export function open(path = DB_PATH): Client {
   return createClient({ url: `file:${path}` });
 }
 
-/** Keep in sync with the schema section of docs/eatclub.md. */
+/** Keep in sync with the schema section of skills/eatclub/references/api.md. */
 export const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 

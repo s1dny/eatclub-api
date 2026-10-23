@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { DB_PATH } from "../src/eatclub/db.ts";
 
-// Runs the CLIs the agent uses against the synced DB (`bun run sync` first) and live OSM routing.
+// Runs the CLIs the agent uses against the synced DB (`bun run eatclub sync` first) and live OSM routing.
 const root = new URL("..", import.meta.url).pathname;
 const SYDNEY_CBD = ["-33.8688", "151.2093"];
 
@@ -17,14 +17,14 @@ async function run(...args: string[]) {
 }
 
 const sql = async (query: string) => {
-  const r = await run("src/eatclub/sql.ts", "--json", query);
+  const r = await run("run", "eatclub", "sql", query);
   expect(r.code).toBe(0);
   return JSON.parse(r.out) as Record<string, unknown>[];
 };
 
 describe("eatclub db", () => {
   beforeAll(() => {
-    if (!existsSync(DB_PATH)) throw new Error(`no database at ${DB_PATH}; run \`bun run sync\``);
+    if (!existsSync(DB_PATH)) throw new Error(`no database at ${DB_PATH}; run \`bun run eatclub sync\``);
   });
 
   test("is populated", async () => {
@@ -38,11 +38,14 @@ describe("eatclub db", () => {
 
   test("walk + full-text menu search finds beef or lamb nearby", async () => {
     const started = performance.now();
-    const walk = await run("src/eatclub/walk.ts", ...SYDNEY_CBD, "--max", "10");
+    const walk = await run("run", "eatclub", "walk", ...SYDNEY_CBD, "--max", "10");
     expect(walk.code).toBe(0);
     // Routing is local: a whole walk query, process start included, stays well under 2 s.
     expect(performance.now() - started).toBeLessThan(2000);
-    expect(walk.out).toMatch(/walk_times: \d+ venues within 10 min/);
+    const data = JSON.parse(walk.out);
+    expect(data.maxMinutes).toBe(10);
+    expect(data.count).toBe(data.venues.length);
+    expect(data.count).toBeGreaterThan(0);
     const rows = await sql(`SELECT DISTINCT v.name, w.minutes, m.category, m.title, m.description
       FROM menu_fts f JOIN menu_items m ON m.id = f.rowid
       JOIN walk_times w ON w.slug = m.slug JOIN venues v ON v.slug = m.slug
@@ -55,7 +58,7 @@ describe("eatclub db", () => {
   });
 
   test("walk times grow with distance and stay realistic", async () => {
-    await run("src/eatclub/walk.ts", "-33.8834", "151.2005", "--max", "30");
+    await run("run", "eatclub", "walk", "-33.8834", "151.2005", "--max", "30");
     const [r] = await sql(`WITH o(lat,lng) AS (VALUES(-33.8834,151.2005)),
       r AS (SELECT w.minutes, w.meters / (6371000*acos(min(1, sin(radians(o.lat))*sin(radians(v.latitude))
         + cos(radians(o.lat))*cos(radians(v.latitude))*cos(radians(v.longitude-o.lng))))) ratio
@@ -69,7 +72,7 @@ describe("eatclub db", () => {
 
   test("live refreshes just the named venues", async () => {
     const before = await sql("SELECT max(fetched_at) t FROM live_deals WHERE slug <> 'bar-bruno'");
-    const r = await run("src/eatclub/live.ts", "bar-bruno");
+    const r = await run("run", "eatclub", "live", "bar-bruno");
     expect(r.code).toBe(0);
     const after = await sql("SELECT max(fetched_at) t FROM live_deals WHERE slug <> 'bar-bruno'");
     expect(after[0]?.t).toBe(before[0]?.t);
@@ -98,7 +101,7 @@ describe("eatclub db", () => {
   });
 
   test("sql is read-only", async () => {
-    const r = await run("src/eatclub/sql.ts", "DELETE FROM venues");
+    const r = await run("run", "eatclub", "sql", "DELETE FROM venues");
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/readonly|read-only|query_only/i);
   });

@@ -1,6 +1,6 @@
 /**
  * Walking network built from an OpenStreetMap extract, stored as one flat binary file and searched
- * in-process with Dijkstra. Loading takes ~100 ms; a 30-minute search a few ms.
+ * in-process with Dijkstra.
  *
  * File layout (little-endian, all 4-byte fields):
  *   u32 nodeCount, u32 edgeCount,
@@ -47,7 +47,7 @@ export function encodeGraph(g: Omit<Graph, "grid" | "n">): Uint8Array {
 
 export async function loadGraph(path = GRAPH_PATH): Promise<Graph> {
   const file = Bun.file(path);
-  if (!(await file.exists())) throw new Error(`no walking network at ${path}; run \`bun run map\``);
+  if (!(await file.exists())) throw new Error(`no walking network at ${path}; run \`bun run eatclub map\``);
   const buf = await file.arrayBuffer();
   const [n = 0, m = 0] = new Uint32Array(buf, 0, 2);
   let off = 8;
