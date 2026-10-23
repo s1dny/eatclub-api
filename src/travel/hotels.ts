@@ -77,7 +77,7 @@ async function search(args: string[]) {
   if (!(nights > 0)) throw new Error("--check-out must be after --check-in");
   const place = location.split(",")[0]!.trim();
 
-  const run: Record<Source, () => Promise<{ stays: Stay[]; totalAvailable?: number | null; warnings?: string[] }>> = {
+  const run: Record<Source, () => Promise<{ stays: Stay[]; place?: string; totalAvailable?: number | null; warnings?: string[] }>> = {
     async google() {
       // Google Hotels has no whole-place or bedroom filters; phrasings steer it towards villas and homes.
       const queries = v.query?.length
@@ -143,7 +143,7 @@ async function search(args: string[]) {
         placeId: null,
         photos: l.photos,
       }));
-      return { stays, totalAvailable: r.totalAvailable };
+      return { stays, place: r.place, totalAvailable: r.totalAvailable };
     },
     async cozycozy() {
       const r = await cozycozy.search({ location, checkIn, checkOut, adults, entire, pool, minBedrooms, pages });
@@ -239,7 +239,11 @@ async function search(args: string[]) {
       console.error(`hotels search: ${source} failed: ${error}`);
       return;
     }
-    bySource[source] = { found: r.value.stays.length, totalAvailable: r.value.totalAvailable ?? null };
+    bySource[source] = {
+      ...(r.value.place ? { place: r.value.place } : {}),
+      found: r.value.stays.length,
+      totalAvailable: r.value.totalAvailable ?? null,
+    };
     warnings.push(...(r.value.warnings ?? []));
     stays.push(...r.value.stays);
   });

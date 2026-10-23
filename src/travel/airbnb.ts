@@ -7,6 +7,8 @@ const HEADERS = {
   "Accept-Language": "en-AU,en;q=0.9",
 };
 const POOL_AMENITY = "7";
+/** The public key Airbnb's own web client sends to its autocomplete API. */
+const WEB_API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20";
 
 async function page(url: string) {
   const response = await fetch(url, { headers: HEADERS });
@@ -52,11 +54,35 @@ export type AirbnbSearch = {
   pages: number;
 };
 
+/**
+ * A free-text query Airbnb can't resolve ("Ao Nang, Thailand") silently returns listings worldwide.
+ * The site resolves the place through autocomplete first and searches its place id; do the same.
+ */
+async function resolve(location: string): Promise<{ query: string; placeId: string }> {
+  const params = new URLSearchParams({
+    user_input: location,
+    key: WEB_API_KEY,
+    locale: "en-AU",
+    num_results: "5",
+    api_version: "1.2.0",
+    options: "should_filter_by_vertical_refinement|hide_nav_results|should_show_stays|simple_search",
+  });
+  const url = `${ORIGIN}/api/v2/autocompletes-personalized?${params}`;
+  const response = await fetch(url, { headers: HEADERS });
+  if (!response.ok) throw new Error(`Airbnb autocomplete ${response.status} for "${location}"`);
+  const terms = ((await response.json()) as any).autocomplete_terms ?? [];
+  const place = terms.find((t: any) => t.suggestion_type === "LOCATION" && t.explore_search_params?.place_id);
+  if (!place) throw new Error(`Airbnb has no place matching "${location}"`);
+  return { query: place.explore_search_params.query, placeId: place.explore_search_params.place_id };
+}
+
 export async function search(
   q: AirbnbSearch,
-): Promise<{ nights: number; totalAvailable: number | null; listings: Listing[] }> {
+): Promise<{ place: string; nights: number; totalAvailable: number | null; listings: Listing[] }> {
+  const place = await resolve(q.location);
   const params = new URLSearchParams({
-    query: q.location,
+    query: place.query,
+    place_id: place.placeId,
     checkin: q.checkIn,
     checkout: q.checkOut,
     adults: String(q.adults),
@@ -75,7 +101,7 @@ export async function search(
       if (!cursors[i]) break;
       params.set("cursor", cursors[i]!);
     }
-    const url = `${ORIGIN}/s/${encodeURIComponent(q.location)}/homes?${params}`;
+    const url = `${ORIGIN}/s/${encodeURIComponent(place.query)}/homes?${params}`;
     const results = (await page(url))?.presentation?.staysSearch?.results;
     if (!results) throw new Error(`Airbnb search returned no results block for ${url}`);
     cursors = results.paginationInfo?.pageCursors ?? [];
@@ -112,7 +138,7 @@ export async function search(
       });
     }
   }
-  return { nights: n, totalAvailable: total, listings: [...listings.values()] };
+  return { place: place.query, nights: n, totalAvailable: total, listings: [...listings.values()] };
 }
 
 export async function listing(idOrUrl: string, stay: { checkIn?: string; checkOut?: string; adults: number }) {
