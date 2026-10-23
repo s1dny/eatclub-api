@@ -21,7 +21,7 @@ bun run travel map init /absolute/path/to/trip-map
 2. **Flights:** when dates are a range or flexible, always run `flights grid` over the whole range for every candidate destination in one call. Never sample one date pair. Use `flights search` only after picking dates, and check `inputs.tripType` is `round-trip`.
 3. **Hotels:** `hotels google` for real prices on the cheapest dates (Google Hotels compares Booking.com, Agoda, Trip.com and others). Use `hotels hotelist` to check quality: AI ratings from reviews and photos, pros/cons, booking links. Prices are per room per night.
 4. **Around the hotel:** `places nearby` from the hotel's coordinates for cafes, restaurants, markets and sights, ranked by popularity with distance in km.
-5. **Map:** `map init`, fill `places.json` (one group per option; each place's `placeId` from `places search`), run it, and check the map, a place card and a route line in a real browser before showing the user.
+5. **Map:** deliver the interactive map as a single static HTML file by default, preserving the satellite map, pins, Google place cards and driving routes. Inline the application code and place data; do not replace the map with a comparison report or screenshot. See [map](references/map.md) for packaging and Google's origin restrictions. Verify the delivered file in its actual opening context, including a place card and a route line, before claiming it works without a server. If Google blocks direct file use, explain the blocker and resolve the hosting/key decision with the user instead of silently starting a local server.
 
 Report prices with the date they were fetched; they change daily. Treat HTTP/RPC failures as errors, not empty results.
 
