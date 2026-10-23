@@ -17,7 +17,7 @@ Input JSON:
 
 Output follows Google Earth's own KML export (card template styles, gx:Carousel photos, Earth icons), so
 descriptions and photos show in Earth's info card. Each group's pins and drive lines share its colour. Drives are OSRM (OpenStreetMap) road routes; their time and
-distance are added to the destination place's details. Prints a JSON summary; failures exit non-zero.`;
+distance are in the drive line's name and card. Prints a JSON summary; failures exit non-zero.`;
 
 type Place = {
   id: string;
@@ -115,7 +115,6 @@ async function kml(input: Input) {
         b = byId.get(to);
       if (!a || !b) throw new Error(`Unknown drive place in ${group.name}: ${from} → ${to}`);
       const d = await drive(a, b);
-      b.details = { ...b.details, [`Drive from ${a.name}`]: `${d.minutes} min · ${d.km} km` };
       drives.push({ from, to, minutes: d.minutes, km: d.km });
       lines.push(
         `<Placemark><name>${esc(`${a.name} → ${b.name}: ${d.minutes} min`)}</name><styleUrl>#g${g}_line</styleUrl>` +
@@ -134,7 +133,9 @@ async function kml(input: Input) {
         ? `<gx:Carousel><gx:Image kml:id="img_${g}_${i}"><gx:imageUrl>${esc(p.photo)}</gx:imageUrl></gx:Image></gx:Carousel>`
         : "";
       const ids = (p.mid ? `<gx:mid>${esc(p.mid)}</gx:mid>` : "") + (p.fid ? `<gx:fid>${esc(p.fid)}</gx:fid>` : "");
-      return `<Placemark><name>${esc(p.name)}</name><description>${cdata(description(p))}</description>${ids}<styleUrl>#${id}</styleUrl>${carousel}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
+      const text = description(p);
+      // Leave description empty for linked places: Earth shows Google's own place card only when nothing custom replaces it.
+      return `<Placemark><name>${esc(p.name)}</name>${text ? `<description>${cdata(text)}</description>` : ""}${ids}<styleUrl>#${id}</styleUrl>${carousel}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
     });
     folders.push(`<Folder><name>${esc(group.name)}</name>${pins.join("")}${lines.join("")}</Folder>`);
     summary.push({ group: group.name, color, places: group.places.length, drives });
