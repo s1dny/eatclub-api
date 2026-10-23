@@ -1,270 +1,260 @@
 import { parseArgs } from "node:util";
-import { executeOperation } from "google-travel-website-api";
+import * as agoda from "./agoda.ts";
 import * as airbnb from "./airbnb.ts";
-import { places } from "./google.ts";
-import { FIELDS, shape } from "./places.ts";
+import * as google from "./google-hotels.ts";
 
-export const help = `  bun run travel hotels google --query "Langkawi villas" [--query "Pantai Cenang villas" …] --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--min-stars 4] [--min-rating 4.3] [--sort lowest-price|highest-rating|most-reviewed] [--limit 20]
-  bun run travel hotels airbnb --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--entire] [--pool] [--min-bedrooms 1] [--max-price-per-night 200] [--min-rating 4.7] [--sort lowest-price|highest-rating|most-reviewed] [--pages 1] [--limit 20]
-  bun run travel hotels airbnb-listing --id <listing id or URL> [--check-in 2026-12-02 --check-out 2026-12-09] [--adults 2]
-  bun run travel hotels hotelist --city Phuket [--amenities pool,beach_view] [--max-price-usd 150] [--min-rating 7.5] [--sort best|cheapest|priciest|newest]
-  bun run travel hotels hotelist-hotel --hotel "<name, slug or hotelist URL>" [--city Phuket]`;
+export const help = `  bun run travel hotels search --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--entire] [--pool] [--min-bedrooms 1] [--max-price-per-night 250] [--min-rating 4.5] [--sort lowest-price|highest-rating|most-reviewed] [--sources google,airbnb,agoda] [--query "Pantai Cenang villas" …] [--pages 1] [--limit 40]
+  bun run travel hotels details --url <Airbnb or Agoda URL from search> [--check-in 2026-12-02 --check-out 2026-12-09] [--adults 2]`;
 
-type Hotel = {
+const SOURCES = ["google", "airbnb", "agoda"] as const;
+type Source = (typeof SOURCES)[number];
+
+/** One row per listing per site. Prices are for the whole stay and per night; ratings are out of 5. */
+type Stay = {
+  source: Source;
+  id: string;
   name: string;
+  type: string | null;
+  totalPrice: number | null;
   pricePerNight: number | null;
-  currency?: string;
-  stars: number | null;
+  currency: string;
   rating: number | null;
-  reviews: number | null;
-  amenities: string[];
+  reviews: number;
+  stars: number | null;
+  entire: boolean | null;
+  pool: boolean | null;
+  bedrooms: number | null;
+  details: string[];
   lat: number;
   lng: number;
-  address?: string;
+  url: string;
   placeId: string | null;
-  fid?: string;
-  website?: string;
-  mapsUrl?: string;
   photos: string[];
-  queries: string[];
 };
 
-/** Google Hotels (metasearch across Booking, Agoda, Trip.com, …): nightly price for the dates, rating, photos, place ids. */
-async function google(args: string[]) {
+async function search(args: string[]) {
   const { values: v } = parseArgs({
     args,
     options: {
-      query: { type: "string", multiple: true },
+      location: { type: "string" },
       "check-in": { type: "string" },
       "check-out": { type: "string" },
       adults: { type: "string" },
       currency: { type: "string" },
-      "min-stars": { type: "string" },
+      entire: { type: "boolean" },
+      pool: { type: "boolean" },
+      "min-bedrooms": { type: "string" },
+      "max-price-per-night": { type: "string" },
       "min-rating": { type: "string" },
       sort: { type: "string" },
+      sources: { type: "string" },
+      query: { type: "string", multiple: true },
+      pages: { type: "string" },
       limit: { type: "string" },
     },
     strict: true,
   });
-  if (!v.query?.length) throw new Error(help);
+  const location = v.location,
+    checkIn = v["check-in"],
+    checkOut = v["check-out"];
+  if (!location || !checkIn || !checkOut) throw new Error(help);
   const sort = v.sort ?? "lowest-price";
   if (!["lowest-price", "highest-rating", "most-reviewed"].includes(sort)) throw new Error(help);
-  const warnings: unknown[] = [];
-  const byKey = new Map<string, Hotel>();
-  let stay: unknown;
-  // Each query returns at most ~12 entities, and narrow phrasings ("<island> private pool villa") often return none,
-  // so several phrasings are searched one after another and merged.
-  for (const query of v.query) {
-    const r: any = await executeOperation({
-      operation: "hotel-filters",
-      query,
-      checkIn: v["check-in"],
-      checkOut: v["check-out"],
-      adults: Number(v.adults ?? 2),
-      currency: v.currency ?? "AUD",
-      sort: "lowest-price",
-      limit: 40,
-      timeout: 90,
-    } as any);
-    stay ??= r.stay;
-    for (const w of r.warnings ?? []) if (w.code !== "HOTEL_PRICE_SCOPE") warnings.push({ query, ...w });
-    if (!r.entities?.length) {
-      warnings.push({ query, code: "NO_RESULTS", message: "Google returned no hotels; try a broader phrasing" });
-      console.error(`hotels google: no results for "${query}"`);
-    }
-    for (const e of r.entities ?? []) {
-      const h: Hotel = {
-        name: e.name,
-        pricePerNight: e.price?.amount ? Math.round(e.price.amount) : null,
-        currency: e.price?.currency,
-        stars: e.hotelClass?.stars ?? null,
-        rating: e.reviews?.rating ?? null,
-        reviews: e.reviews?.count ?? null,
-        amenities: e.amenities ?? [],
-        lat: e.location?.latitude,
-        lng: e.location?.longitude,
-        address: e.location?.address,
-        placeId: e.placeId ?? null,
-        fid: e.knowledgeGraphId,
-        website: e.location?.officialSiteUrl,
-        mapsUrl: e.location?.mapsUrl,
-        photos: (e.photos ?? []).slice(0, 5).map((p: any) => String(p.url).split("=")[0] + "=w800-h533-k-no"),
-        queries: [query],
-      };
-      merge(byKey, h.name.toLowerCase(), h);
-    }
-  }
-  const minStars = Number(v["min-stars"] ?? 0),
+  const sources = (v.sources?.split(",") ?? [...SOURCES]) as Source[];
+  for (const s of sources) if (!SOURCES.includes(s)) throw new Error(`Unknown source ${s}; use ${SOURCES.join(",")}`);
+  const adults = Number(v.adults ?? 2),
+    currency = v.currency ?? "AUD",
+    pages = Math.min(5, Number(v.pages ?? 1)),
+    entire = Boolean(v.entire),
+    pool = Boolean(v.pool),
+    minBedrooms = v["min-bedrooms"] ? Number(v["min-bedrooms"]) : undefined,
+    maxPerNight = v["max-price-per-night"] ? Number(v["max-price-per-night"]) : undefined,
     minRating = Number(v["min-rating"] ?? 0);
-  // Google echoes star filters without enforcing them, so they are applied here.
-  const candidates = [...byKey.values()].filter((h) => (h.stars ?? 0) >= minStars);
-  await enrich(candidates.slice(0, 80));
-  // Room types of one listing ("Villa 25", "Villa 25 - Villa with Private Pool") share a Google place.
-  const byPlace = new Map<string, Hotel>();
-  for (const h of candidates) merge(byPlace, h.placeId ?? h.name.toLowerCase(), h);
-  const hotels = [...byPlace.values()]
-    .filter((h) => (h.rating ?? 0) >= minRating)
-    .sort((a, b) =>
-      sort === "lowest-price"
-        ? (a.pricePerNight ?? 1e9) - (b.pricePerNight ?? 1e9)
-        : sort === "most-reviewed"
-          ? (b.reviews ?? 0) - (a.reviews ?? 0)
-          : (b.rating ?? 0) - (a.rating ?? 0) || (b.reviews ?? 0) - (a.reviews ?? 0),
-    );
-  return { stay, count: hotels.length, hotels: hotels.slice(0, Number(v.limit ?? 20)), warnings };
-}
+  const nights = Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 86400000);
+  if (!(nights > 0)) throw new Error("--check-out must be after --check-in");
+  const place = location.split(",")[0]!.trim();
 
-function merge(into: Map<string, Hotel>, key: string, h: Hotel) {
-  const seen = into.get(key);
-  if (!seen) return void into.set(key, h);
-  for (const q of h.queries) if (!seen.queries.includes(q)) seen.queries.push(q);
-  if (h.pricePerNight && (!seen.pricePerNight || h.pricePerNight < seen.pricePerNight)) {
-    seen.pricePerNight = h.pricePerNight;
-    seen.name = h.name;
-  }
-  seen.rating ??= h.rating;
-  seen.reviews ??= h.reviews;
-}
+  const run: Record<Source, () => Promise<{ stays: Stay[]; totalAvailable?: number | null; warnings?: string[] }>> = {
+    async google() {
+      // Google Hotels has no whole-place or bedroom filters; phrasings steer it towards villas and homes.
+      const queries = v.query?.length
+        ? v.query
+        : entire || pool
+          ? [`${place} villas`, `${place} hotels with pool`, `${place} resorts`]
+          : [`hotels in ${location}`, `${place} villas`, `${place} resorts`];
+      const r = await google.search({ queries, checkIn, checkOut, adults, currency });
+      const stays = r.hotels.map((h): Stay => ({
+        source: "google",
+        id: h.fid ?? h.placeId ?? h.name,
+        name: h.name,
+        type: null,
+        totalPrice: h.pricePerNight ? h.pricePerNight * nights : null,
+        pricePerNight: h.pricePerNight,
+        currency: h.currency ?? currency,
+        rating: h.rating,
+        reviews: h.reviews ?? 0,
+        stars: h.stars,
+        entire: null,
+        pool: h.amenities.some((a) => /pool/i.test(a)) || /pool/i.test(h.name) || null,
+        bedrooms: Number(h.name.match(/(\d+)[- ]?(?:bed(?:room)?|BR)\b/i)?.[1]) || null,
+        details: h.amenities,
+        lat: h.lat,
+        lng: h.lng,
+        url: h.website ?? h.mapsUrl ?? "",
+        placeId: h.placeId,
+        photos: h.photos,
+      }));
+      return { stays, warnings: r.warnings };
+    },
+    async airbnb() {
+      const r = await airbnb.search({
+        location,
+        checkIn,
+        checkOut,
+        adults,
+        currency,
+        entire,
+        pool,
+        minBedrooms,
+        maxPricePerNight: maxPerNight,
+        pages,
+      });
+      const stays = r.listings.map((l): Stay => ({
+        source: "airbnb",
+        id: l.id,
+        name: l.name,
+        type: l.type,
+        totalPrice: l.totalPrice,
+        pricePerNight: l.pricePerNight,
+        currency: l.currency,
+        rating: l.rating,
+        reviews: l.reviews,
+        stars: null,
+        entire: entire || null,
+        pool: pool || null,
+        bedrooms: Number(l.details.join(" ").match(/(\d+) bedrooms?/)?.[1]) || (/studio/i.test(l.name) ? 0 : null),
+        details: [...l.details, ...l.badges],
+        lat: l.lat,
+        lng: l.lng,
+        url: l.url,
+        placeId: null,
+        photos: l.photos,
+      }));
+      return { stays, totalAvailable: r.totalAvailable };
+    },
+    async agoda() {
+      const c = await agoda.city(location);
+      const r = await agoda.search({
+        cityId: c.id,
+        checkIn,
+        checkOut,
+        adults,
+        currency,
+        entire,
+        pool,
+        minBedrooms,
+        pages,
+      });
+      const available = r.properties.filter((p: any) => p.pricing?.isAvailable !== false);
+      const stays = available.map((p: any): Stay => {
+        const info = p.content.informationSummary;
+        const room = p.content.nonHotelAccommodation?.masterRooms?.[0];
+        const offer = p.pricing?.offers?.[0]?.roomOffers?.[0]?.room?.pricing?.[0]?.price;
+        const total = offer?.perBook?.inclusive?.display ?? null;
+        const review = p.content.reviews?.cumulative;
+        return {
+          source: "agoda",
+          id: String(p.propertyId),
+          name: info.displayName.trim(),
+          type: agoda.TYPES[info.accommodationType] ?? null,
+          totalPrice: total ? Math.round(total) : null,
+          pricePerNight: total ? Math.round(total / nights) : null,
+          currency,
+          rating: review?.score ? review.score / 2 : null,
+          reviews: review?.reviewCount ?? 0,
+          stars: info.rating || null,
+          entire: agoda.ENTIRE_TYPES.includes(info.accommodationType),
+          pool: pool || null,
+          bedrooms: room?.noOfBedrooms ?? null,
+          details: room
+            ? [`${room.noOfBedrooms} bedrooms`, `${room.noOfBeds} beds`, `${room.noOfBathrooms} baths`]
+            : (info.atmospheres ?? []).map((a: any) => a.name),
+          lat: info.geoInfo?.latitude,
+          lng: info.geoInfo?.longitude,
+          url: `https://www.agoda.com/en-au${info.propertyLinks?.propertyPage}?checkIn=${checkIn}&los=${nights}&adults=${adults}&rooms=1&currency=${currency}`,
+          placeId: null,
+          photos: (p.content.images?.hotelImages ?? []).slice(0, 3).map((i: any) => `https:${i.urls?.[0]?.value}`),
+        };
+      });
+      return { stays, totalAvailable: r.totalAvailable };
+    },
+  };
 
-/** Google Hotels often omits ratings and place ids for villas and rentals; fill them from Google Maps when the match is within 1 km. */
-async function enrich(hotels: Hotel[]) {
-  const missing = hotels.filter((h) => (!h.placeId || h.rating === null) && Number.isFinite(h.lat));
-  for (let i = 0; i < missing.length; i += 10)
-    await Promise.all(
-      missing.slice(i, i + 10).map(async (h) => {
-        const center = { lat: h.lat, lng: h.lng };
-        const [p] = await places(
-          "searchText",
-          {
-            // "Villa Sawah, Langkawi with Private pool in secluded area." → "Villa Sawah"
-            textQuery: h.name.split(/ [-~|(]|,/)[0]!.trim(),
-            pageSize: 1,
-            locationBias: { circle: { center: { latitude: h.lat, longitude: h.lng }, radius: 2000 } },
-          },
-          FIELDS,
-        );
-        const found = p && shape(p, center);
-        if (!found || found.km > 1) return;
-        h.placeId ??= found.placeId;
-        if (h.rating === null && found.rating) [h.rating, h.reviews] = [found.rating, found.reviews ?? null];
-        h.mapsUrl ??= found.mapsUrl;
-      }),
-    );
-}
-
-/** Hotelist MCP (https://hotelist.com/mcp): AI quality ratings from reviews + photos. Free, no key; 400 requests/day, 50 hotel details/day. */
-async function hotelist(tool: string, args: Record<string, unknown>) {
-  const response = await fetch("https://hotelist.com/mcp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } }),
+  // Sites are independent, so they run in parallel; one failing doesn't hide the others' results.
+  const settled = await Promise.allSettled(sources.map((s) => run[s]()));
+  const bySource: Record<string, unknown> = {};
+  const failures: { source: Source; error: string }[] = [];
+  const warnings: string[] = [];
+  let stays: Stay[] = [];
+  settled.forEach((r, i) => {
+    const source = sources[i]!;
+    if (r.status === "rejected") {
+      const error = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      failures.push({ source, error });
+      console.error(`hotels search: ${source} failed: ${error}`);
+      return;
+    }
+    bySource[source] = { found: r.value.stays.length, totalAvailable: r.value.totalAvailable ?? null };
+    warnings.push(...(r.value.warnings ?? []));
+    stays.push(...r.value.stays);
   });
-  const text = await response.text();
-  const body = JSON.parse(text.slice(text.indexOf("{")));
-  if (!response.ok || body.error || body.result?.isError)
-    throw new Error(`Hotelist ${response.status}: ${JSON.stringify(body.error ?? body.result?.content)}`);
-  const content = body.result.content?.[0]?.text ?? "";
-  try {
-    return JSON.parse(content);
-  } catch {
-    return content;
-  }
+  // Filters each site can't apply itself. Unknown values (null) are kept, not guessed.
+  stays = stays.filter(
+    (s) =>
+      (!entire || s.entire !== false) &&
+      (!pool || s.pool !== false) &&
+      (!minBedrooms || s.bedrooms === null || s.bedrooms >= minBedrooms) &&
+      (!maxPerNight || s.pricePerNight === null || s.pricePerNight <= maxPerNight) &&
+      (s.rating ?? 0) >= minRating,
+  );
+  stays.sort((a, b) =>
+    sort === "lowest-price"
+      ? (a.totalPrice ?? 1e9) - (b.totalPrice ?? 1e9)
+      : sort === "most-reviewed"
+        ? b.reviews - a.reviews
+        : (b.rating ?? 0) - (a.rating ?? 0) || b.reviews - a.reviews,
+  );
+  return {
+    stay: { location, checkIn, checkOut, nights, adults, currency },
+    sources: bySource,
+    failures,
+    warnings,
+    count: stays.length,
+    stays: stays.slice(0, Number(v.limit ?? 40)),
+  };
+}
+
+async function details(args: string[]) {
+  const { values: v } = parseArgs({
+    args,
+    options: {
+      url: { type: "string" },
+      "check-in": { type: "string" },
+      "check-out": { type: "string" },
+      adults: { type: "string" },
+      currency: { type: "string" },
+    },
+    strict: true,
+  });
+  if (!v.url) throw new Error(help);
+  const stay = { checkIn: v["check-in"], checkOut: v["check-out"], adults: Number(v.adults ?? 2) };
+  if (/airbnb\./.test(v.url)) return airbnb.listing(v.url, stay);
+  if (/agoda\.com/.test(v.url)) return agoda.details(v.url, { ...stay, currency: v.currency ?? "AUD" });
+  throw new Error("details reads Airbnb and Agoda URLs; Google Hotels rows link to the booking site or Google Maps");
 }
 
 export async function main([command, ...args]: string[]) {
-  if (command === "google") return google(args);
-  if (command === "airbnb") {
-    const { values: v } = parseArgs({
-      args,
-      options: {
-        location: { type: "string" },
-        "check-in": { type: "string" },
-        "check-out": { type: "string" },
-        adults: { type: "string" },
-        currency: { type: "string" },
-        entire: { type: "boolean" },
-        pool: { type: "boolean" },
-        "min-bedrooms": { type: "string" },
-        "max-price-per-night": { type: "string" },
-        "min-rating": { type: "string" },
-        sort: { type: "string" },
-        pages: { type: "string" },
-        limit: { type: "string" },
-      },
-      strict: true,
-    });
-    if (!v.location || !v["check-in"] || !v["check-out"]) throw new Error(help);
-    const sort = v.sort ?? "lowest-price";
-    if (!["lowest-price", "highest-rating", "most-reviewed"].includes(sort)) throw new Error(help);
-    const r = await airbnb.search({
-      location: v.location,
-      checkIn: v["check-in"],
-      checkOut: v["check-out"],
-      adults: Number(v.adults ?? 2),
-      currency: v.currency ?? "AUD",
-      entire: Boolean(v.entire),
-      pool: Boolean(v.pool),
-      minBedrooms: v["min-bedrooms"] ? Number(v["min-bedrooms"]) : undefined,
-      maxPricePerNight: v["max-price-per-night"] ? Number(v["max-price-per-night"]) : undefined,
-      pages: Math.min(5, Number(v.pages ?? 1)),
-    });
-    const minRating = Number(v["min-rating"] ?? 0);
-    const listings = r.listings
-      .filter((l) => (l.rating ?? 0) >= minRating)
-      .sort((a, b) =>
-        sort === "lowest-price"
-          ? (a.totalPrice ?? 1e9) - (b.totalPrice ?? 1e9)
-          : sort === "most-reviewed"
-            ? b.reviews - a.reviews
-            : (b.rating ?? 0) - (a.rating ?? 0) || b.reviews - a.reviews,
-      );
-    return { ...r, count: listings.length, listings: listings.slice(0, Number(v.limit ?? 20)) };
-  }
-  if (command === "airbnb-listing") {
-    const { values: v } = parseArgs({
-      args,
-      options: {
-        id: { type: "string" },
-        "check-in": { type: "string" },
-        "check-out": { type: "string" },
-        adults: { type: "string" },
-      },
-      strict: true,
-    });
-    if (!v.id) throw new Error(help);
-    return airbnb.listing(v.id, { checkIn: v["check-in"], checkOut: v["check-out"], adults: Number(v.adults ?? 2) });
-  }
-  if (command === "hotelist") {
-    const { values: v } = parseArgs({
-      args,
-      options: {
-        city: { type: "string" },
-        query: { type: "string" },
-        amenities: { type: "string" },
-        "max-price-usd": { type: "string" },
-        "min-rating": { type: "string" },
-        sort: { type: "string" },
-      },
-      strict: true,
-    });
-    if (!v.city) throw new Error(help);
-    return hotelist("search_hotels", {
-      city: v.city,
-      ...(v.query ? { query: v.query } : {}),
-      ...(v.amenities ? { amenities: v.amenities.split(",") } : {}),
-      ...(v["max-price-usd"] ? { max_price_usd: Number(v["max-price-usd"]) } : {}),
-      ...(v["min-rating"] ? { min_rating: Number(v["min-rating"]) } : {}),
-      ...(v.sort ? { sort: v.sort } : {}),
-    });
-  }
-  if (command === "hotelist-hotel") {
-    const { values: v } = parseArgs({
-      args,
-      options: { hotel: { type: "string" }, city: { type: "string" } },
-      strict: true,
-    });
-    if (!v.hotel) throw new Error(help);
-    return hotelist("get_hotel", { hotel: v.hotel, ...(v.city ? { city: v.city } : {}) });
-  }
+  if (command === "search") return search(args);
+  if (command === "details") return details(args);
   throw new Error(help);
 }

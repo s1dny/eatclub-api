@@ -164,36 +164,10 @@ describe("travel", () => {
     expect(r.results.map((x: any) => x.select)).toEqual(r.results.map((_: any, i: number) => i + 1));
   }, 180000);
 
-  test("hotels google returns priced, rated hotels for the dates", async () => {
+  test("hotels search returns priced whole homes with pools from Google Hotels, Airbnb and Agoda", async () => {
     const r = await travel(
       "hotels",
-      "google",
-      "--query",
-      "Kata Beach Phuket resorts",
-      "--query",
-      "Karon Beach Phuket resorts",
-      "--check-in",
-      "2026-12-01",
-      "--check-out",
-      "2026-12-07",
-      "--min-stars",
-      "4",
-      "--limit",
-      "5",
-    );
-    expect(r.stay.checkIn).toBe("2026-12-01");
-    expect(r.hotels.length).toBeGreaterThan(0);
-    const prices = r.hotels.map((h: any) => h.pricePerNight);
-    expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
-    expect(r.hotels.every((h: any) => h.stars >= 4 && h.lat && h.photos.length && h.queries.length)).toBe(true);
-    expect(new Set(r.hotels.flatMap((h: any) => h.queries)).size).toBe(2);
-    expect(new Set(r.hotels.map((h: any) => h.placeId)).size).toBe(r.hotels.length);
-  }, 240000);
-
-  test("hotels airbnb finds whole homes with a pool, priced for the dates, and reads a listing's details", async () => {
-    const r = await travel(
-      "hotels",
-      "airbnb",
+      "search",
       "--location",
       "Langkawi, Malaysia",
       "--check-in",
@@ -202,30 +176,51 @@ describe("travel", () => {
       "2026-12-09",
       "--entire",
       "--pool",
-      "--pages",
-      "2",
       "--limit",
-      "40",
+      "200",
     );
-    expect(r.nights).toBe(7);
-    expect(r.listings.length).toBeGreaterThan(18);
-    expect(new Set(r.listings.map((l: any) => l.id)).size).toBe(r.listings.length);
-    const prices = r.listings.map((l: any) => l.totalPrice);
-    expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
-    expect(r.listings.every((l: any) => l.totalPrice > 0 && Math.abs(l.lat - 6.35) < 0.3 && l.url)).toBe(true);
-    const rated = r.listings.find((l: any) => l.reviews > 20)!;
-    const d = await travel("hotels", "airbnb-listing", "--id", rated.url);
-    expect(d.id).toBe(rated.id);
-    expect(d.overview.some((o: string) => /bed/.test(o))).toBe(true);
-    expect(d.amenities.some((a: string) => /pool/i.test(a))).toBe(true);
-    expect(d.reviews).toBeGreaterThan(20);
-  }, 180000);
+    expect(r.failures).toEqual([]);
+    expect(r.stay.nights).toBe(7);
+    for (const source of ["google", "airbnb", "agoda"]) {
+      expect(r.sources[source].found).toBeGreaterThan(5);
+      expect(r.stays.some((s: any) => s.source === source && s.totalPrice > 0)).toBe(true);
+    }
+    const priced = r.stays.filter((s: any) => s.totalPrice !== null).map((s: any) => s.totalPrice);
+    expect(priced).toEqual([...priced].sort((a: number, b: number) => a - b));
+    expect(r.stays.every((s: any) => s.entire !== false && Math.abs(s.lat - 6.35) < 0.3 && s.url)).toBe(true);
+    expect(r.stays.every((s: any) => s.rating === null || s.rating <= 5)).toBe(true);
+  }, 240000);
 
-  test("hotels hotelist returns rated hotels", async () => {
-    const r = await travel("hotels", "hotelist", "--city", "Phuket", "--amenities", "pool");
-    expect(r.hotels.length).toBeGreaterThan(0);
-    expect(typeof r.hotels[0].ai_rating).toBe("number");
-  });
+  test("hotels details reads Agoda beds per room and Airbnb amenities", async () => {
+    const { stays } = await travel(
+      "hotels",
+      "search",
+      "--location",
+      "Langkawi, Malaysia",
+      "--check-in",
+      "2026-12-02",
+      "--check-out",
+      "2026-12-09",
+      "--entire",
+      "--sources",
+      "airbnb,agoda",
+      "--sort",
+      "most-reviewed",
+    );
+    // Search can still price a property that is sold out live; details reports that as available: false.
+    let agoda: any;
+    for (const s of stays.filter((s: any) => s.source === "agoda").slice(0, 4)) {
+      agoda = await travel("hotels", "details", "--url", s.url);
+      expect(typeof agoda.available).toBe("boolean");
+      if (agoda.available) break;
+    }
+    expect(agoda.available).toBe(true);
+    expect(agoda.rooms.some((r: any) => r.bedrooms.some((b: string) => /bed/.test(b)))).toBe(true);
+    expect(agoda.amenities.length).toBeGreaterThan(5);
+    const airbnb = await travel("hotels", "details", "--url", stays.find((s: any) => s.source === "airbnb").url);
+    expect(airbnb.overview.some((o: string) => /bed/.test(o))).toBe(true);
+    expect(airbnb.amenities.length).toBeGreaterThan(5);
+  }, 240000);
 
   test("places search finds Google place ids", async () => {
     const [top] = await travel("places", "search", "--query", "Sydney Airport");
