@@ -106,3 +106,38 @@ describe("eatclub db", () => {
     expect(r.err).toMatch(/readonly|read-only|query_only/i);
   });
 });
+
+describe("flights grid", () => {
+  test("returns a full live date grid per destination", async () => {
+    const out = `/tmp/flights-e2e-${Date.now()}`;
+    const r = await run(
+      "run",
+      "flights",
+      "grid",
+      "--origin",
+      "SYD",
+      "--destination",
+      "DPS,HKT",
+      "--start",
+      "2026-12-01",
+      "--end",
+      "2026-12-10",
+      "--min-days",
+      "6",
+      "--max-days",
+      "8",
+      "--out",
+      out,
+    );
+    expect(r.code).toBe(0);
+    const { grids } = JSON.parse(r.out) as {
+      grids: { query: { destination: string }; complete: boolean; cells: { price: number }[] }[];
+    };
+    expect(grids.map((g) => g.query.destination)).toEqual(["DPS", "HKT"]);
+    for (const g of grids) {
+      expect(g.complete).toBe(true);
+      expect(g.cells.length).toBeGreaterThan(20);
+      expect(g.cells.every((c) => c.price > 0)).toBe(true);
+    }
+  });
+});

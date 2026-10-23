@@ -24,7 +24,7 @@ import {
 } from "./api.ts";
 
 const help = `flights — Google Flights for agents
-  bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 2026-12-31 [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
+  bun run flights grid --origin SYD --destination NRT[,HKT,DPS] --start 2026-11-01 --end 2026-12-31 [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
   bun run flights search --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
   bun run flights autocomplete --query Tokyo
   bun run flights booking --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08 --select 1 --select-return 1
@@ -35,7 +35,7 @@ const help = `flights — Google Flights for agents
 Grid inputs are configurable. Defaults: 6–8 calendar days, AUD, 1 adult, economy.
 Common filters: --currency AUD --adults 1 --cabin-class economy --max-stops non-stop --airlines QF,JQ --checked-bags 1
 Additional filters are listed by 'filters'. --filters file.json accepts the complete filter object.
-Grid outputs: complete JSON on stdout; grid.json and raw/*.json on disk; --resume reuses completed chunks from the same query.
+Grid outputs: complete JSON on stdout ({grids:[...]} for several destinations, each in <out>/<destination>); grid.json and raw/*.json on disk; --resume reuses completed chunks from the same query.
 `;
 function camel(s: string) {
   return s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
@@ -144,58 +144,72 @@ async function main() {
   const minDays = integer(values["min-days"], 6, "--min-days", 1, 90),
     maxDays = integer(values["max-days"], 8, "--max-days", minDays, 90);
   if (daysBetween(start, end) > 730) throw new Error("Use a departure range of at most two years");
-  const query: GridQuery = {
-    origin: location(values.origin, "--origin"),
-    destination: location(values.destination, "--destination"),
-    start,
-    end,
-    minDays,
-    maxDays,
-    filters,
-  };
-  const hash = createHash("sha256").update(JSON.stringify(query)).digest("hex").slice(0, 12);
-  const out = resolve(String(values.out ?? `data/flights/${hash}`));
-  let result: GridResult = {
-    query,
-    startedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    complete: false,
-    chunks: [],
-    cells: [],
-    missing: [],
-  };
-  const file = Bun.file(join(out, "grid.json"));
-  if (await file.exists()) {
-    if (!values.resume) throw new Error(`Output already exists: ${out}; use --resume or a new --out`);
-    result = await file.json();
-    if (JSON.stringify(result.query) !== JSON.stringify(query))
-      throw new Error("Resume query differs from saved query (including filters); use a new output directory");
-    delete result.error;
+  const destinations = String(values.destination ?? "")
+    .split(",")
+    .map((d) => location(d.trim(), "--destination"));
+  const many = destinations.length > 1;
+  const grids = [];
+  for (const destination of destinations) {
+    if (many) console.error(`Grid ${values.origin}→${destination}`);
+    grids.push(await runGrid(destination));
   }
-  await mkdir(join(out, "raw"), { recursive: true });
-  try {
-    for (let from = start; from <= end; from = addDays(from, 30)) {
-      const to = addDays(from, 29) < end ? addDays(from, 29) : end;
-      if (result.chunks.some((c) => c.from === from && c.to === to)) continue;
-      console.error(`Fetching ${from}–${to}, ${minDays}–${maxDays} days`);
-      const { raw, cells } = await fetchChunk(query, from, to, async (raw) => {
-        await atomic(join(out, "raw", `${from}_${to}.json`), JSON.stringify(raw, null, 2));
-      });
-      result.cells.push(...cells);
-      result.chunks.push({ from, to, fetchedAt: raw.fetchedAt, count: cells.length });
-      await save(out, result);
+  console.log(JSON.stringify(many ? { grids } : grids[0], null, 2));
+  async function runGrid(destination: string) {
+    const query: GridQuery = {
+      origin: location(values.origin, "--origin"),
+      destination,
+      start,
+      end,
+      minDays,
+      maxDays,
+      filters,
+    };
+    const hash = createHash("sha256").update(JSON.stringify(query)).digest("hex").slice(0, 12);
+    const out = resolve(
+      values.out ? (many ? join(String(values.out), destination) : String(values.out)) : `data/flights/${hash}`,
+    );
+    let result: GridResult = {
+      query,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      complete: false,
+      chunks: [],
+      cells: [],
+      missing: [],
+    };
+    const file = Bun.file(join(out, "grid.json"));
+    if (await file.exists()) {
+      if (!values.resume) throw new Error(`Output already exists: ${out}; use --resume or a new --out`);
+      result = await file.json();
+      if (JSON.stringify(result.query) !== JSON.stringify(query))
+        throw new Error("Resume query differs from saved query (including filters); use a new output directory");
+      delete result.error;
     }
-    result.complete = true;
-    await save(out, result);
-  } catch (error) {
-    if (error instanceof RpcFailure)
-      await atomic(join(out, "raw", `failure-${Date.now()}.json`), JSON.stringify(error.response, null, 2));
-    result.complete = false;
-    result.error = error instanceof Error ? error.message : String(error);
-    await save(out, result);
-    throw error;
+    await mkdir(join(out, "raw"), { recursive: true });
+    try {
+      for (let from = start; from <= end; from = addDays(from, 30)) {
+        const to = addDays(from, 29) < end ? addDays(from, 29) : end;
+        if (result.chunks.some((c) => c.from === from && c.to === to)) continue;
+        console.error(`Fetching ${from}–${to}, ${minDays}–${maxDays} days`);
+        const { raw, cells } = await fetchChunk(query, from, to, async (raw) => {
+          await atomic(join(out, "raw", `${from}_${to}.json`), JSON.stringify(raw, null, 2));
+        });
+        result.cells.push(...cells);
+        result.chunks.push({ from, to, fetchedAt: raw.fetchedAt, count: cells.length });
+        await save(out, result);
+      }
+      result.complete = true;
+      await save(out, result);
+    } catch (error) {
+      if (error instanceof RpcFailure)
+        await atomic(join(out, "raw", `failure-${Date.now()}.json`), JSON.stringify(error.response, null, 2));
+      result.complete = false;
+      result.error = error instanceof Error ? error.message : String(error);
+      await save(out, result);
+      throw error;
+    }
+    return { ...result, out };
   }
-  console.log(JSON.stringify({ ...result, out }, null, 2));
 }
 await main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));

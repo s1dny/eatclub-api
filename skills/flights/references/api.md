@@ -33,7 +33,7 @@ Search and booking use the shared library's HTTP transport and browser fallback 
 ]
 ```
 
-The CLI sends the stay interval in one request per 30-day departure chunk. It checkpoints completed chunks so interrupted queries can resume.
+The CLI sends the stay interval in one request per 30-day departure chunk. It checkpoints completed chunks so interrupted queries can resume. A comma-separated `--destination` runs one grid per destination sequentially; stdout is `{grids: [...]}` and each grid is saved under `<out>/<destination>`.
 
 Trip settings (zero-based indices):
 
