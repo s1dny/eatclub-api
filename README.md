@@ -29,7 +29,7 @@ bun run eatclub live bar-bruno
 
 ## Travel
 
-Trip research in one CLI: Google Flights date grids and itineraries, hotel, villa and home search across Google Hotels, Airbnb and Agoda, Google Maps place and nearby search, and a satellite trip map built as one HTML file with Google place cards and drive routes.
+Trip research in one CLI: Google Flights date grids and itineraries, hotel, villa and home search across Google Hotels, Airbnb, Agoda and cozycozy, Google Maps place and nearby search, and a satellite trip map built as one HTML file with Google place cards and drive routes.
 
 ```sh
 bun run travel help

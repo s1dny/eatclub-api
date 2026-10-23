@@ -1,17 +1,20 @@
 import { parseArgs } from "node:util";
 import * as agoda from "./agoda.ts";
 import * as airbnb from "./airbnb.ts";
+import * as cozycozy from "./cozycozy.ts";
 import * as google from "./google-hotels.ts";
 
-export const help = `  bun run travel hotels search --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--entire] [--pool] [--min-bedrooms 1] [--max-price-per-night 250] [--min-rating 4.5] [--sort lowest-price|highest-rating|most-reviewed] [--sources google,airbnb,agoda] [--query "Pantai Cenang villas" …] [--pages 1] [--limit 40]
+export const help = `  bun run travel hotels search --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--entire] [--pool] [--min-bedrooms 1] [--max-price-per-night 250] [--min-rating 4.5] [--sort lowest-price|highest-rating|most-reviewed] [--sources google,airbnb,agoda,cozycozy] [--query "Pantai Cenang villas" …] [--pages 1] [--limit 40]
   bun run travel hotels details --url <Airbnb or Agoda URL from search> [--check-in 2026-12-02 --check-out 2026-12-09] [--adults 2]`;
 
-const SOURCES = ["google", "airbnb", "agoda"] as const;
+const SOURCES = ["google", "airbnb", "agoda", "cozycozy"] as const;
 type Source = (typeof SOURCES)[number];
 
 /** One row per listing per site. Prices are for the whole stay and per night; ratings are out of 5. */
 type Stay = {
   source: Source;
+  /** For cozycozy rows, the booking site with the cheapest offer. */
+  site?: string;
   id: string;
   name: string;
   type: string | null;
@@ -139,6 +142,38 @@ async function search(args: string[]) {
         url: l.url,
         placeId: null,
         photos: l.photos,
+      }));
+      return { stays, totalAvailable: r.totalAvailable };
+    },
+    async cozycozy() {
+      const r = await cozycozy.search({ location, checkIn, checkOut, adults, entire, pool, minBedrooms, pages });
+      const stays = r.results.map((c): Stay => ({
+        source: "cozycozy",
+        site: c.site,
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        totalPrice: c.totalPrice,
+        pricePerNight: c.totalPrice ? Math.round(c.totalPrice / nights) : null,
+        currency: c.currency,
+        rating: c.rating,
+        reviews: c.reviews,
+        stars: null,
+        entire: entire || (/entire/i.test(c.offerText ?? "") ? true : null),
+        pool: pool || null,
+        bedrooms: c.bedrooms,
+        details: [
+          ...(c.bedrooms !== null ? [`${c.bedrooms} bedrooms`] : []),
+          ...(c.beds !== null ? [`${c.beds} beds`] : []),
+          ...(c.guests !== null ? [`${c.guests} guests`] : []),
+          ...(c.offerText ? [c.offerText] : []),
+          `${c.offers} offers compared`,
+        ],
+        lat: c.lat,
+        lng: c.lng,
+        url: c.url,
+        placeId: null,
+        photos: c.photos,
       }));
       return { stays, totalAvailable: r.totalAvailable };
     },

@@ -1,6 +1,6 @@
 ---
 name: travel
-description: Trip and holiday research. Google Flights date grids and itineraries, hotel, villa and home search across Google Hotels, Airbnb and Agoda, Google Maps place search and nearby search (cafes, food, markets, sights), and a satellite trip map delivered as one HTML file with Google place cards and drive routes. Use for any flight, hotel, destination, itinerary or "where should we go" question.
+description: Trip and holiday research. Google Flights date grids and itineraries, hotel, villa and home search across Google Hotels, Airbnb, Agoda and cozycozy, Google Maps place search and nearby search (cafes, food, markets, sights), and a satellite trip map delivered as one HTML file with Google place cards and drive routes. Use for any flight, hotel, destination, itinerary or "where should we go" question.
 ---
 
 Resolve this skill's real directory through symlinks. The repository root is two directories above it. Run commands from the root; they print JSON. `bun run travel help` lists every command and flag.
@@ -12,7 +12,7 @@ Resolve this skill's real directory through symlinks. The repository root is two
    `flights grid --origin SYD --destination HKT,KBV,LGK --start 2026-12-01 --return-by 2026-12-31 --min-days 6 --max-days 8 --adults 2 --max-stops one-or-fewer-stops`
    Then get itineraries for the chosen dates, outbound plus the return of the cheapest outbound:
    `flights search --origin SYD --destination LGK,KBV --departure 2026-12-01 --return 2026-12-09 --adults 2 --select cheapest`
-3. **Hotels:** one search covers Google Hotels, Airbnb and Agoda, one row per listing per site, priced for the whole stay:
+3. **Hotels:** one search covers Google Hotels, Airbnb, Agoda and cozycozy, one row per listing per site, priced for the whole stay:
    `hotels search --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 --entire --pool --min-rating 4.5`
    Then read the shortlist's beds, room types and pool (private or shared) with `hotels details --url <row url>` before recommending anything.
 4. **Around the hotel:** `places nearby --lat … --lng … --types cafe,restaurant` (or `market`, `tourist_attraction`, `hiking_area`, `beach`) ranks places by popularity with distance in km.

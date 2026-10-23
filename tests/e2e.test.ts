@@ -164,7 +164,7 @@ describe("travel", () => {
     expect(r.results.map((x: any) => x.select)).toEqual(r.results.map((_: any, i: number) => i + 1));
   }, 180000);
 
-  test("hotels search returns priced whole homes with pools from Google Hotels, Airbnb and Agoda", async () => {
+  test("hotels search returns priced whole homes with pools from Google Hotels, Airbnb, Agoda and cozycozy", async () => {
     const r = await travel(
       "hotels",
       "search",
@@ -181,7 +181,7 @@ describe("travel", () => {
     );
     expect(r.failures).toEqual([]);
     expect(r.stay.nights).toBe(7);
-    for (const source of ["google", "airbnb", "agoda"]) {
+    for (const source of ["google", "airbnb", "agoda", "cozycozy"]) {
       expect(r.sources[source].found).toBeGreaterThan(5);
       expect(r.stays.some((s: any) => s.source === source && s.totalPrice > 0)).toBe(true);
     }
@@ -189,6 +189,8 @@ describe("travel", () => {
     expect(priced).toEqual([...priced].sort((a: number, b: number) => a - b));
     expect(r.stays.every((s: any) => s.entire !== false && Math.abs(s.lat - 6.35) < 0.3 && s.url)).toBe(true);
     expect(r.stays.every((s: any) => s.rating === null || s.rating <= 5)).toBe(true);
+    const cozy = r.stays.filter((s: any) => s.source === "cozycozy");
+    expect(cozy.every((s: any) => s.site && /^https:/.test(s.url) && !s.url.includes("%CLICK_ID%"))).toBe(true);
   }, 240000);
 
   test("hotels details reads Agoda beds per room and Airbnb amenities", async () => {

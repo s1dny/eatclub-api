@@ -140,7 +140,8 @@ export async function details(
   idOrUrl: string,
   stay: { checkIn?: string; checkOut?: string; adults: number; currency: string },
 ) {
-  const id = /^\d+$/.test(idOrUrl) ? idOrUrl : await idFromUrl(idOrUrl);
+  // Partner links (from cozycozy) carry the id as hid=; property page URLs need a lookup.
+  const id = /^\d+$/.test(idOrUrl) ? idOrUrl : (idOrUrl.match(/[?&]hid=(\d+)/)?.[1] ?? (await idFromUrl(idOrUrl)));
   const params = new URLSearchParams({
     hotel_id: id,
     adults: String(stay.adults),
@@ -149,10 +150,11 @@ export async function details(
   });
   // Rooms and prices only come back for dates: flags win, else the dates in a search row's URL.
   const fromUrl = /^https?:/.test(idOrUrl) ? new URL(idOrUrl).searchParams : new URLSearchParams();
-  const checkIn = stay.checkIn ?? fromUrl.get("checkIn");
+  const checkIn = stay.checkIn ?? fromUrl.get("checkIn") ?? fromUrl.get("checkin");
+  const checkOut = stay.checkOut ?? fromUrl.get("checkout");
   const los =
-    stay.checkIn && stay.checkOut
-      ? String(Math.round((Date.parse(stay.checkOut) - Date.parse(stay.checkIn)) / 86400000))
+    checkIn && checkOut
+      ? String(Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 86400000))
       : fromUrl.get("los");
   if (checkIn) params.set("checkIn", checkIn);
   if (los) params.set("los", los);
