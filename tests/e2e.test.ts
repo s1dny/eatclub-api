@@ -141,3 +141,41 @@ describe("flights grid", () => {
     }
   });
 });
+
+describe("maps kml", () => {
+  test("builds colour-coded pins and a real drive", async () => {
+    const dir = `/tmp/maps-e2e-${Date.now()}`;
+    await Bun.write(
+      `${dir}/map.json`,
+      JSON.stringify({
+        name: "Test",
+        groups: [
+          {
+            name: "Sydney",
+            color: "#ff0000",
+            places: [
+              { id: "a", name: "Sydney Airport", lat: -33.9399, lng: 151.1753, icon: "airport" },
+              {
+                id: "b",
+                name: "Bondi",
+                lat: -33.8915,
+                lng: 151.2767,
+                icon: "hotel",
+                photo: "https://example.com/p.jpg",
+              },
+            ],
+            drives: [{ from: "a", to: "b" }],
+          },
+        ],
+      }),
+    );
+    const r = await run("run", "maps", "kml", "--in", `${dir}/map.json`, "--out", `${dir}/map.kml`);
+    expect(r.code).toBe(0);
+    const { groups } = JSON.parse(r.out);
+    expect(groups[0].drives[0].minutes).toBeGreaterThan(5);
+    const kml = await Bun.file(`${dir}/map.kml`).text();
+    expect(kml).toContain("<color>ff0000ff</color>");
+    expect(kml).toContain('<img src="https://example.com/p.jpg"');
+    expect(kml).toContain("<LineString>");
+  });
+});

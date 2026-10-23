@@ -44,10 +44,10 @@ bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 202
 
 ## Maps
 
-A barebones Bun/TypeScript/Leaflet starter with free Esri satellite imagery and OSRM driving routes. No API key.
+Builds a Google Earth KML from a small JSON file: colour-coded groups of pins with photo popups and OSRM driving routes. No API key.
 
 ```sh
-bun run maps init /absolute/path/to/new-map
+bun run maps kml --in map.json --out map.kml
 ```
 
 [Skill](skills/maps/SKILL.md)
