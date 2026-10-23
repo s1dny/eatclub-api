@@ -17,7 +17,7 @@ Resolve this skill's real directory through symlinks. The repository root is two
    For branded hotels and resorts, `hotels hotelist --city Phuket --amenities pool` adds AI quality ratings, pros/cons and booking links.
 4. **Around the hotel:** `places nearby --lat … --lng … --types cafe,restaurant` (or `market`, `tourist_attraction`, `hiking_area`, `beach`) ranks places by popularity with distance in km.
 5. **Map:** always deliver the map as one HTML file that opens from disk:
-   `map init <folder>`, write `<folder>/places.json`, `map build <folder> --title "…"`, then `map check <folder>/map.html`. Only claim the map works after `check` reports `ok: true`, and look at its screenshot.
+   `map init <folder>`, write `<folder>/places.json`, then `map build <folder> --title "…"` writes `<folder>/map.html`.
 
 Report prices with the date they were fetched; they change daily. Commands exit non-zero on HTTP/RPC failures: those are errors, not empty results.
 

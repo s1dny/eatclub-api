@@ -37,7 +37,7 @@ bun run travel flights grid --origin SYD --destination HKT,LGK --start 2026-12-0
 bun run travel flights search --origin SYD --destination LGK --departure 2026-12-01 --return 2026-12-09 --select cheapest
 bun run travel hotels google --query "Langkawi villas" --query "Pantai Cenang villas" --check-in 2026-12-02 --check-out 2026-12-09
 bun run travel places nearby --lat 6.2817 --lng 99.7332 --types cafe
-bun run travel map init /abs/trip-map && bun run travel map build /abs/trip-map && bun run travel map check /abs/trip-map/map.html
+bun run travel map init /abs/trip-map && bun run travel map build /abs/trip-map
 ```
 
 [Skill](skills/travel/SKILL.md) · references: [flights](skills/travel/references/flights.md), [hotels](skills/travel/references/hotels.md), [places](skills/travel/references/places.md), [map](skills/travel/references/map.md)

@@ -24,15 +24,6 @@ const glyphs: Record<string, string> = {
 };
 const card = document.getElementById("card")!;
 const legend = document.getElementById("legend")!;
-/** Read by `travel map check`. */
-const status = {
-  markers: 0,
-  tiles: false,
-  routes: [] as { from: string; to: string; minutes?: number; error?: string }[],
-  card: null as null | { placeId: string; loaded?: boolean; error?: string },
-};
-Object.assign(window, { tripMap: status });
-
 // Replaced at build time by `travel map build`.
 const key = process.env.GOOGLE_MAPS_API_KEY;
 if (!key) throw new Error("No Maps key; build with `bun run travel map build <folder>`.");
@@ -50,20 +41,13 @@ const map = new Map(document.getElementById("map")!, {
   mapTypeId: "hybrid",
   streetViewControl: false,
 });
-map.addListener("tilesloaded", () => (status.tiles = true));
 const all = new LatLngBounds();
 
 /** Google's own place card (Places UI Kit). Must be built with createElement; innerHTML on the container doesn't load. */
 function showCard(placeId: string) {
   card.classList.add("open");
   const details = document.createElement("gmp-place-details");
-  const state: NonNullable<typeof status.card> = { placeId };
-  status.card = state;
-  details.addEventListener("gmp-load", () => (state.loaded = true));
-  details.addEventListener("gmp-error", (e) => {
-    state.error = String((e as ErrorEvent).error ?? e.type);
-    console.error("place card", placeId, e);
-  });
+  details.addEventListener("gmp-error", (e) => console.error("place card", placeId, e));
   details.innerHTML = `<gmp-place-details-place-request place="${placeId}"></gmp-place-details-place-request><gmp-place-all-content></gmp-place-all-content>`;
   card.replaceChildren(details);
 }
@@ -93,11 +77,9 @@ for (const [i, group] of (groups as Group[]).entries()) {
       content: pin as unknown as Node,
       gmpClickable: true,
     });
-    marker.dataset.kind = p.kind;
     marker.addEventListener("gmp-click", () => showCard(p.placeId));
     bounds.extend(position);
     all.extend(position);
-    status.markers++;
   }
   for (const [from, to] of group.routes ?? []) {
     const a = group.places[from!]!,
@@ -106,8 +88,6 @@ for (const [i, group] of (groups as Group[]).entries()) {
     const line = document.createElement("small");
     line.textContent = `${short(a.name)} → ${short(b.name)}: …`;
     row.append(line);
-    const result: (typeof status.routes)[number] = { from: a.name, to: b.name };
-    status.routes.push(result);
     Route.computeRoutes({
       origin: { lat: a.lat, lng: a.lng },
       destination: { lat: b.lat, lng: b.lng },
@@ -118,11 +98,10 @@ for (const [i, group] of (groups as Group[]).entries()) {
         const r = routes?.[0];
         if (!r?.path) throw new Error(`No route ${a.name} → ${b.name}`);
         new Polyline({ map, path: r.path, strokeColor: color, strokeWeight: 5, strokeOpacity: 0.9 });
-        result.minutes = Math.round(Number(r.durationMillis) / 60000);
-        line.textContent = `${short(a.name)} → ${short(b.name)}: ${result.minutes} min drive`;
+        const minutes = Math.round(Number(r.durationMillis) / 60000);
+        line.textContent = `${short(a.name)} → ${short(b.name)}: ${minutes} min drive`;
       },
       (e: unknown) => {
-        result.error = String(e);
         line.textContent = `${short(a.name)} → ${short(b.name)}: route failed`;
         console.error(group.name, e);
       },

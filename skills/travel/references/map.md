@@ -6,7 +6,6 @@ A satellite Google map with one coloured group of pins per option, Google's own 
 bun run travel map init /abs/trip-map          # copies the template and installs it
 # write /abs/trip-map/places.json
 bun run travel map build /abs/trip-map --title "Langkawi vs Krabi"   # → /abs/trip-map/map.html
-bun run travel map check /abs/trip-map/map.html                     # → ok, routes, card, map-check.png
 ```
 
 `places.json`, one group per option; a group's pins and routes share its colour:
@@ -31,7 +30,7 @@ bun run travel map check /abs/trip-map/map.html                     # → ok, ro
 - `kind` sets the pin glyph: airport, hotel, beach, hike, sight, market, food, cafe, bar.
 - `routes` are index pairs; each is listed under its group as "A → B: N min drive". Put comparison numbers in the group name, not on pins.
 - `?place=<placeId>` opens a card on load. Edit the folder's `map.ts`/`index.html` freely; `build` bundles them.
-- `check` opens the file from disk in a visible Chromium (headless can't render the map), waits for tiles and every route, opens the first hotel's card, and fails with the reasons if any part didn't load. It saves `map-check.png` next to the file.
+- A route between places with no road between them (an island, a boat-only beach) shows "route failed".
 
 ## Google Cloud
 
