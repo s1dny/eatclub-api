@@ -124,8 +124,8 @@ describe("travel", () => {
       "DPS,HKT",
       "--start",
       "2026-12-01",
-      "--end",
-      "2026-12-10",
+      "--return-by",
+      "2026-12-18",
       "--min-days",
       "6",
       "--max-days",
@@ -136,10 +136,33 @@ describe("travel", () => {
     expect(grids.map((g: any) => g.query.destination)).toEqual(["DPS", "HKT"]);
     for (const g of grids) {
       expect(g.complete).toBe(true);
+      expect(g.query.end).toBe("2026-12-12");
       expect(g.cells.length).toBeGreaterThan(20);
-      expect(g.cells.every((c: any) => c.price > 0)).toBe(true);
+      expect(g.cells.every((c: any) => c.price > 0 && c.returnDate <= "2026-12-18")).toBe(true);
     }
   });
+
+  test("flights search --select cheapest returns the cheapest outbound's return flights", async () => {
+    const r = await travel(
+      "flights",
+      "search",
+      "--origin",
+      "SYD",
+      "--destination",
+      "DPS",
+      "--departure",
+      "2026-12-01",
+      "--return",
+      "2026-12-08",
+      "--select",
+      "cheapest",
+    );
+    expect(r.inputs.tripType).toBe("round-trip");
+    expect(r.selectedOutbound.price).toBeGreaterThan(0);
+    expect(r.results.length).toBeGreaterThan(0);
+    expect(r.results.every((x: any) => x.legs[0].origin === "DPS")).toBe(true);
+    expect(r.results.map((x: any) => x.select)).toEqual(r.results.map((_: any, i: number) => i + 1));
+  }, 180000);
 
   test("hotels google returns priced, rated hotels for the dates", async () => {
     const r = await travel(
@@ -147,6 +170,8 @@ describe("travel", () => {
       "google",
       "--query",
       "Kata Beach Phuket resorts",
+      "--query",
+      "Karon Beach Phuket resorts",
       "--check-in",
       "2026-12-01",
       "--check-out",
@@ -160,8 +185,10 @@ describe("travel", () => {
     expect(r.hotels.length).toBeGreaterThan(0);
     const prices = r.hotels.map((h: any) => h.pricePerNight);
     expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
-    expect(r.hotels.every((h: any) => h.stars >= 4 && h.lat && h.photos.length)).toBe(true);
-  }, 120000);
+    expect(r.hotels.every((h: any) => h.stars >= 4 && h.lat && h.photos.length && h.queries.length)).toBe(true);
+    expect(new Set(r.hotels.flatMap((h: any) => h.queries)).size).toBe(2);
+    expect(new Set(r.hotels.map((h: any) => h.placeId)).size).toBe(r.hotels.length);
+  }, 240000);
 
   test("hotels hotelist returns rated hotels", async () => {
     const r = await travel("hotels", "hotelist", "--city", "Phuket", "--amenities", "pool");
@@ -192,11 +219,16 @@ describe("travel", () => {
     expect(found.every((p: any) => p.km <= 1.6 && p.types.includes("cafe"))).toBe(true);
   });
 
-  test("map init creates a template that installs and typechecks", async () => {
+  test("map build produces one HTML file whose pins, routes and place card load from disk", async () => {
     const dir = `/tmp/map-e2e-${Date.now()}`;
-    expect((await travel("map", "init", dir)).keyConfigured).toBe(true);
-    const sh = (cmd: string[]) => Bun.spawn(cmd, { cwd: dir, stdout: "pipe", stderr: "pipe" }).exited;
-    expect(await sh(["bun", "install"])).toBe(0);
-    expect(await sh(["bun", "run", "typecheck"])).toBe(0);
-  }, 120000);
+    expect((await travel("map", "init", dir)).path).toBe(dir);
+    expect(await Bun.spawn(["bun", "run", "typecheck"], { cwd: dir, stdout: "pipe", stderr: "pipe" }).exited).toBe(0);
+    const { out } = await travel("map", "build", dir, "--title", "e2e");
+    const html = await Bun.file(out).text();
+    expect(html).not.toMatch(/src="\.\/map\.ts"|\/api\/key|localhost/);
+    const check = await travel("map", "check", out);
+    expect(check.ok).toBe(true);
+    expect(check.card.loaded).toBe(true);
+    expect(check.routes.every((r: any) => r.minutes > 0)).toBe(true);
+  }, 180000);
 });

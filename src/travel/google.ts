@@ -1,6 +1,5 @@
-// Google Maps Platform key shared by places, nearby and the map template. It is referrer-restricted to the template's origin.
+// Google Maps Platform key shared by places, hotel enrichment and built maps (API-restricted, no website restriction).
 export const key = process.env.GOOGLE_MAPS_API_KEY ?? "";
-export const ORIGIN = "http://localhost:3000/";
 
 export async function places(endpoint: string, body: unknown, fields: string[]) {
   if (!key) throw new Error("GOOGLE_MAPS_API_KEY is not set (repository .env)");
@@ -10,7 +9,6 @@ export async function places(endpoint: string, body: unknown, fields: string[]) 
       "Content-Type": "application/json",
       "X-Goog-Api-Key": key,
       "X-Goog-FieldMask": fields.map((f) => `places.${f}`).join(","),
-      Referer: ORIGIN,
     },
     body: JSON.stringify(body),
   });

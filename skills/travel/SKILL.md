@@ -1,28 +1,24 @@
 ---
 name: travel
-description: Trip and holiday research. Google Flights date grids and itineraries, Google Hotels prices, Hotelist hotel quality ratings, Google Maps place search and nearby search (cafes, food, markets, sights), and a local satellite map website with Google place cards and drive routes. Use for any flight, hotel, destination, itinerary or "where should we go" question.
+description: Trip and holiday research. Google Flights date grids and itineraries, Google Hotels prices, Hotelist hotel quality ratings, Google Maps place search and nearby search (cafes, food, markets, sights), and a satellite trip map delivered as one HTML file with Google place cards and drive routes. Use for any flight, hotel, destination, itinerary or "where should we go" question.
 ---
 
-Resolve this skill's real directory through symlinks. The repository root is two directories above it. Run commands from the root; they print JSON.
-
-```sh
-bun run travel help
-bun run travel flights grid --origin SYD --destination HKT,DPS,LGK --start 2026-12-01 --end 2026-12-31 --min-days 6 --max-days 8
-bun run travel hotels google --query "Kata Beach Phuket resorts with pool" --check-in 2026-12-01 --check-out 2026-12-07 --min-stars 4
-bun run travel hotels hotelist --city Phuket --amenities pool --sort best
-bun run travel places search --query "Aurico Kata Resort & Spa"
-bun run travel places nearby --lat 7.8269 --lng 98.2992 --types cafe,restaurant --radius 1500
-bun run travel map init /absolute/path/to/trip-map
-```
+Resolve this skill's real directory through symlinks. The repository root is two directories above it. Run commands from the root; they print JSON. `bun run travel help` lists every command and flag.
 
 ## Holiday workflow
 
 1. **Shortlist destinations** that meet every hard requirement: weather for the dates, visas for the travellers' passports, vibe and transport limits. Only propose options that meet all of them.
-2. **Flights:** when dates are a range or flexible, always run `flights grid` over the whole range for every candidate destination in one call. Never sample one date pair. Use `flights search` only after picking dates, and check `inputs.tripType` is `round-trip`.
-3. **Hotels:** `hotels google` for real prices on the cheapest dates (Google Hotels compares Booking.com, Agoda, Trip.com and others). Use `hotels hotelist` to check quality: AI ratings from reviews and photos, pros/cons, booking links. Prices are per room per night.
-4. **Around the hotel:** `places nearby` from the hotel's coordinates for cafes, restaurants, markets and sights, ranked by popularity with distance in km.
-5. **Map:** deliver the interactive map as a single static HTML file by default, preserving the satellite map, pins, Google place cards and driving routes. Inline the application code and place data; do not replace the map with a comparison report or screenshot. See [map](references/map.md) for packaging and Google's origin restrictions. Verify the delivered file in its actual opening context, including a place card and a route line, before claiming it works without a server. If Google blocks direct file use, explain the blocker and resolve the hosting/key decision with the user instead of silently starting a local server.
+2. **Flights:** for a date range, run one `flights grid` over the whole range with every candidate destination, never a sampled date pair:
+   `flights grid --origin SYD --destination HKT,KBV,LGK --start 2026-12-01 --return-by 2026-12-31 --min-days 6 --max-days 8 --adults 2 --max-stops one-or-fewer-stops`
+   Then get itineraries for the chosen dates, outbound plus the return of the cheapest outbound:
+   `flights search --origin SYD --destination LGK,KBV --departure 2026-12-01 --return 2026-12-09 --adults 2 --select cheapest`
+3. **Hotels:** `hotels google` with several phrasings in one call; results are merged and missing ratings and place ids are filled from Google Maps:
+   `hotels google --query "Langkawi villas" --query "Pantai Cenang villas" --query "Langkawi hotels with pool" --check-in 2026-12-02 --check-out 2026-12-09`
+   For branded hotels and resorts, `hotels hotelist --city Phuket --amenities pool` adds AI quality ratings, pros/cons and booking links.
+4. **Around the hotel:** `places nearby --lat … --lng … --types cafe,restaurant` (or `market`, `tourist_attraction`, `hiking_area`, `beach`) ranks places by popularity with distance in km.
+5. **Map:** always deliver the map as one HTML file that opens from disk:
+   `map init <folder>`, write `<folder>/places.json`, `map build <folder> --title "…"`, then `map check <folder>/map.html`. Only claim the map works after `check` reports `ok: true`, and look at its screenshot.
 
-Report prices with the date they were fetched; they change daily. Treat HTTP/RPC failures as errors, not empty results.
+Report prices with the date they were fetched; they change daily. Commands exit non-zero on HTTP/RPC failures: those are errors, not empty results.
 
 References, read when using that area: [flights](references/flights.md) · [hotels](references/hotels.md) · [places](references/places.md) · [map](references/map.md)

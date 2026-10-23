@@ -1,7 +1,15 @@
 # Hotels
 
-`hotels google` uses `google-travel-website-api` (`hotel-filters`) for Google Hotels, a metasearch of Booking.com, Agoda, Trip.com, Expedia and hotel sites. With `--check-in/--check-out` the nightly price is for those dates (`stay.scope: entity-offers`). Google echoes some filters without enforcing them, so `--min-stars` and `--min-rating` are applied locally. Results vary a little between calls. `amenities` is often incomplete: "pool" missing doesn't mean no pool. `placeId` is often null; get it with `places search --query "<hotel name> <area>"` for the map. `photos` are direct image URLs.
+## hotels google
 
-`hotels hotelist` / `hotelist-hotel` call Hotelist's public MCP server (`https://hotelist.com/mcp`, no key; 30 requests/min, 400/day, 50 hotel details/day). It gives AI quality ratings (0–10) built from reviews and room photos, pros/cons, USD prices, year built/renovated, amenities and booking links. Coverage is a few dozen to a few hundred hotels per major city. `list_cities` isn't exposed; an unknown city returns an error. Credit hotelist.com when publishing its data.
+Google Hotels metasearch (Booking.com, Agoda, Trip.com, Expedia, hotel sites). `pricePerNight` is per room per night for `--check-in/--check-out` and `--adults`.
 
-Not covered: room-level bed types (sofa bed, twin) need Booking.com or Agoda room data.
+- Each `--query` returns at most ~12 places, and results vary between calls. Pass several phrasings (repeat `--query`); they run in turn, merge by name and Google place, and keep the lowest price. `queries` lists which phrasings found a hotel.
+- Narrow phrasings often return nothing ("Langkawi private pool villa" → 0, "Langkawi villas" → 12). A query with no results adds a `NO_RESULTS` warning and a stderr line; broaden it.
+- Missing `rating`, `reviews` and `placeId` are filled from Google Maps when a place of that name is within 1 km. Generic listing names ("Villa, Private Pool") can match the wrong place; check the name before quoting a rating.
+- `--min-stars` and `--min-rating` are applied locally because Google doesn't enforce them; unrated places fail `--min-rating`.
+- `amenities` is often incomplete: a missing "Pool" doesn't mean no pool. Bed types (sofa bed, twin) aren't available; check listing photos on Booking.com or Agoda.
+
+## hotels hotelist / hotelist-hotel
+
+Hotelist's public MCP server (no key; 30 requests/min, 400/day, 50 hotel details/day): AI ratings (0–10) from reviews and room photos, pros/cons, USD prices, year built/renovated, booking links. It only covers branded hotels and resorts in major cities, not villas, homestays or rentals. An unknown city is an error. Credit hotelist.com when publishing its data.

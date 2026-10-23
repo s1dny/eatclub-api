@@ -24,8 +24,8 @@ import {
 } from "./api.ts";
 
 const help = `flights — Google Flights for agents
-  bun run travel flights grid --origin SYD --destination NRT[,HKT,DPS] --start 2026-11-01 --end 2026-12-31 [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
-  bun run travel flights search --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
+  bun run travel flights grid --origin SYD --destination NRT[,HKT,DPS] --start 2026-11-01 (--end 2026-12-24 | --return-by 2026-12-31) [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
+  bun run travel flights search --origin SYD --destination NRT[,HKT] --departure 2026-11-01 --return 2026-11-08 [--select cheapest|N]
   bun run travel flights autocomplete --query Tokyo
   bun run travel flights booking --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08 --select 1 --select-return 1
   bun run travel flights filters
@@ -35,6 +35,7 @@ const help = `flights — Google Flights for agents
 Grid inputs are configurable. Defaults: 6–8 calendar days, AUD, 1 adult, economy.
 Common filters: --currency AUD --adults 1 --cabin-class economy --max-stops non-stop --airlines QF,JQ --checked-bags 1
 Additional filters are listed by 'filters'. --filters file.json accepts the complete filter object.
+Prices are totals for all passengers. Search results carry "select": the 1-based --select value that fetches their return flights.
 Grid outputs: complete JSON on stdout ({grids:[...]} for several destinations, each in <out>/<destination>); grid.json and raw/*.json on disk; --resume reuses completed chunks from the same query.
 `;
 function camel(s: string) {
@@ -84,6 +85,7 @@ export async function main(args: string[]) {
     "calendar-start",
     "calendar-end",
     "nights",
+    "return-by",
   ];
   const options = Object.fromEntries(stringFlags.map((k) => [k, { type: "string" as const }]));
   const parsed = parseArgs({
@@ -129,19 +131,39 @@ export async function main(args: string[]) {
       } as Record<string, string>
     )[command];
     if (!operation) throw new Error(`Unknown command ${command}\n${help}`);
-    console.log(JSON.stringify(await executeOperation({ ...merged, operation, raw: true, timeout: 90 }), null, 2));
+    if (command !== "search") {
+      console.log(JSON.stringify(await executeOperation({ ...merged, operation, raw: true, timeout: 90 }), null, 2));
+      return;
+    }
+    // Sequential on purpose: parallel searches were throttled into empty or short result lists.
+    const searches = [];
+    for (const destination of String(values.destination ?? "").split(",")) {
+      const input = { ...merged, destination: destination.trim(), operation, raw: true, timeout: 90 };
+      if (values.select === "cheapest") {
+        const outbound: any = await executeOperation({ ...input, select: undefined });
+        const priced = (outbound.results ?? []).map((r: any, i: number) => ({ r, i })).filter((x: any) => x.r.price);
+        if (!priced.length) throw new Error(`No priced outbound flights to ${input.destination}`);
+        const cheapest = priced.reduce((a: any, b: any) => (b.r.price < a.r.price ? b : a));
+        input.select = String(cheapest.i + 1);
+      }
+      const r: any = await executeOperation(input);
+      r.results = (r.results ?? []).map((x: any, i: number) => ({ select: i + 1, ...x }));
+      searches.push(r);
+    }
+    console.log(JSON.stringify(searches.length > 1 ? { searches } : searches[0], null, 2));
     return;
   }
   if (filters.tripType && filters.tripType !== "round-trip") throw new Error("grid requires round-trip flights");
+  const minDays = integer(values["min-days"], 6, "--min-days", 1, 90),
+    maxDays = integer(values["max-days"], 8, "--max-days", minDays, 90);
+  const returnBy = values["return-by"] ? date(values["return-by"], "--return-by") : undefined;
   const start = date(values.start, "--start"),
-    end = date(values.end, "--end");
+    end = values.end ? date(values.end, "--end") : returnBy ? addDays(returnBy, -minDays) : date(undefined, "--end");
   if (end < start) throw new Error("--end must be on or after --start");
   if (values.departure || values.return || values["calendar-start"] || values["calendar-end"] || values.nights)
     throw new Error(
       "grid uses --start, --end, --min-days and --max-days; departure/return/calendar-start/calendar-end/nights belong to other commands",
     );
-  const minDays = integer(values["min-days"], 6, "--min-days", 1, 90),
-    maxDays = integer(values["max-days"], 8, "--max-days", minDays, 90);
   if (daysBetween(start, end) > 730) throw new Error("Use a departure range of at most two years");
   const destinations = String(values.destination ?? "")
     .split(",")
@@ -207,6 +229,9 @@ export async function main(args: string[]) {
       await save(out, result);
       throw error;
     }
-    return { ...result, out };
+    // --return-by trims the output only; grid.json keeps every fetched cell.
+    if (!returnBy) return { ...result, out };
+    const by = (c: { returnDate: string }) => c.returnDate <= returnBy;
+    return { ...result, returnBy, cells: result.cells.filter(by), missing: result.missing.filter(by), out };
   }
 }

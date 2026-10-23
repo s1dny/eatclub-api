@@ -4,7 +4,7 @@ import { km, places } from "./google.ts";
 export const help = `  bun run travel places search --query "Phuket International Airport"     # Google place id, lat/lng, types, rating
   bun run travel places nearby --lat 7.8269 --lng 98.2992 [--radius 1500] [--types cafe,restaurant] [--rank popularity|distance] [--limit 20]`;
 
-const FIELDS = [
+export const FIELDS = [
   "id",
   "displayName",
   "location",
@@ -17,7 +17,7 @@ const FIELDS = [
   "googleMapsUri",
 ];
 
-function shape(p: any, from?: { lat: number; lng: number }) {
+export function shape(p: any, from?: { lat: number; lng: number }) {
   const at = { lat: p.location.latitude, lng: p.location.longitude };
   return {
     name: p.displayName?.text,
