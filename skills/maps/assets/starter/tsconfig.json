@@ -4,10 +4,11 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "lib": ["ESNext", "DOM"],
-    "types": ["bun", "google.maps"],
+    "types": ["bun"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "noUncheckedSideEffectImports": false
   }
 }

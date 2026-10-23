@@ -42,17 +42,15 @@ bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 202
 
 [Skill](skills/flights/SKILL.md) · [API reference](skills/flights/references/api.md)
 
-## Google Maps
+## Maps
 
-A separate skill with a tiny Bun/TypeScript starter for a 2D Google satellite map with airport/stay pins, a details panel and calculated driving routes.
+A barebones Bun/TypeScript/Leaflet starter with free Esri satellite imagery and OSRM driving routes. No API key.
 
 ```sh
 bun run maps init /absolute/path/to/new-map
 ```
 
-Generated apps have `locations.ts`, `map.ts`, `server.ts` and an ignored `.env.local`. Set `GOOGLE_MAPS_API_KEY` in this repository’s `.env` to reuse the browser key in new apps. In a generated app, run `bun install`, then `bun run dev`.
-
-[Skill and setup](skills/google-maps/SKILL.md)
+[Skill](skills/maps/SKILL.md)
 
 ## Development
 
