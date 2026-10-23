@@ -29,13 +29,14 @@ bun run eatclub live bar-bruno
 
 ## Travel
 
-Trip research in one CLI: Google Flights date grids and itineraries, Google Hotels prices, Hotelist quality ratings, Google Maps place and nearby search, and a satellite trip map built as one HTML file with Google place cards and drive routes.
+Trip research in one CLI: Google Flights date grids and itineraries, Google Hotels prices, Airbnb homes, Hotelist quality ratings, Google Maps place and nearby search, and a satellite trip map built as one HTML file with Google place cards and drive routes.
 
 ```sh
 bun run travel help
 bun run travel flights grid --origin SYD --destination HKT,LGK --start 2026-12-01 --return-by 2026-12-31
 bun run travel flights search --origin SYD --destination LGK --departure 2026-12-01 --return 2026-12-09 --select cheapest
 bun run travel hotels google --query "Langkawi villas" --query "Pantai Cenang villas" --check-in 2026-12-02 --check-out 2026-12-09
+bun run travel hotels airbnb --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 --entire --pool
 bun run travel places nearby --lat 6.2817 --lng 99.7332 --types cafe
 bun run travel map init /abs/trip-map && bun run travel map build /abs/trip-map
 ```

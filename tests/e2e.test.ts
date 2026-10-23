@@ -190,6 +190,37 @@ describe("travel", () => {
     expect(new Set(r.hotels.map((h: any) => h.placeId)).size).toBe(r.hotels.length);
   }, 240000);
 
+  test("hotels airbnb finds whole homes with a pool, priced for the dates, and reads a listing's details", async () => {
+    const r = await travel(
+      "hotels",
+      "airbnb",
+      "--location",
+      "Langkawi, Malaysia",
+      "--check-in",
+      "2026-12-02",
+      "--check-out",
+      "2026-12-09",
+      "--entire",
+      "--pool",
+      "--pages",
+      "2",
+      "--limit",
+      "40",
+    );
+    expect(r.nights).toBe(7);
+    expect(r.listings.length).toBeGreaterThan(18);
+    expect(new Set(r.listings.map((l: any) => l.id)).size).toBe(r.listings.length);
+    const prices = r.listings.map((l: any) => l.totalPrice);
+    expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
+    expect(r.listings.every((l: any) => l.totalPrice > 0 && Math.abs(l.lat - 6.35) < 0.3 && l.url)).toBe(true);
+    const rated = r.listings.find((l: any) => l.reviews > 20)!;
+    const d = await travel("hotels", "airbnb-listing", "--id", rated.url);
+    expect(d.id).toBe(rated.id);
+    expect(d.overview.some((o: string) => /bed/.test(o))).toBe(true);
+    expect(d.amenities.some((a: string) => /pool/i.test(a))).toBe(true);
+    expect(d.reviews).toBeGreaterThan(20);
+  }, 180000);
+
   test("hotels hotelist returns rated hotels", async () => {
     const r = await travel("hotels", "hotelist", "--city", "Phuket", "--amenities", "pool");
     expect(r.hotels.length).toBeGreaterThan(0);

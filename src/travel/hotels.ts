@@ -1,9 +1,12 @@
 import { parseArgs } from "node:util";
 import { executeOperation } from "google-travel-website-api";
+import * as airbnb from "./airbnb.ts";
 import { places } from "./google.ts";
 import { FIELDS, shape } from "./places.ts";
 
 export const help = `  bun run travel hotels google --query "Langkawi villas" [--query "Pantai Cenang villas" …] --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--min-stars 4] [--min-rating 4.3] [--sort lowest-price|highest-rating|most-reviewed] [--limit 20]
+  bun run travel hotels airbnb --location "Langkawi, Malaysia" --check-in 2026-12-02 --check-out 2026-12-09 [--adults 2] [--entire] [--pool] [--min-bedrooms 1] [--max-price-per-night 200] [--min-rating 4.7] [--sort lowest-price|highest-rating|most-reviewed] [--pages 1] [--limit 20]
+  bun run travel hotels airbnb-listing --id <listing id or URL> [--check-in 2026-12-02 --check-out 2026-12-09] [--adults 2]
   bun run travel hotels hotelist --city Phuket [--amenities pool,beach_view] [--max-price-usd 150] [--min-rating 7.5] [--sort best|cheapest|priciest|newest]
   bun run travel hotels hotelist-hotel --hotel "<name, slug or hotelist URL>" [--city Phuket]`;
 
@@ -170,6 +173,67 @@ async function hotelist(tool: string, args: Record<string, unknown>) {
 
 export async function main([command, ...args]: string[]) {
   if (command === "google") return google(args);
+  if (command === "airbnb") {
+    const { values: v } = parseArgs({
+      args,
+      options: {
+        location: { type: "string" },
+        "check-in": { type: "string" },
+        "check-out": { type: "string" },
+        adults: { type: "string" },
+        currency: { type: "string" },
+        entire: { type: "boolean" },
+        pool: { type: "boolean" },
+        "min-bedrooms": { type: "string" },
+        "max-price-per-night": { type: "string" },
+        "min-rating": { type: "string" },
+        sort: { type: "string" },
+        pages: { type: "string" },
+        limit: { type: "string" },
+      },
+      strict: true,
+    });
+    if (!v.location || !v["check-in"] || !v["check-out"]) throw new Error(help);
+    const sort = v.sort ?? "lowest-price";
+    if (!["lowest-price", "highest-rating", "most-reviewed"].includes(sort)) throw new Error(help);
+    const r = await airbnb.search({
+      location: v.location,
+      checkIn: v["check-in"],
+      checkOut: v["check-out"],
+      adults: Number(v.adults ?? 2),
+      currency: v.currency ?? "AUD",
+      entire: Boolean(v.entire),
+      pool: Boolean(v.pool),
+      minBedrooms: v["min-bedrooms"] ? Number(v["min-bedrooms"]) : undefined,
+      maxPricePerNight: v["max-price-per-night"] ? Number(v["max-price-per-night"]) : undefined,
+      pages: Math.min(5, Number(v.pages ?? 1)),
+    });
+    const minRating = Number(v["min-rating"] ?? 0);
+    const listings = r.listings
+      .filter((l) => (l.rating ?? 0) >= minRating)
+      .sort((a, b) =>
+        sort === "lowest-price"
+          ? (a.totalPrice ?? 1e9) - (b.totalPrice ?? 1e9)
+          : sort === "most-reviewed"
+            ? b.reviews - a.reviews
+            : (b.rating ?? 0) - (a.rating ?? 0) || b.reviews - a.reviews,
+      );
+    return { ...r, count: listings.length, listings: listings.slice(0, Number(v.limit ?? 20)) };
+  }
+  if (command === "airbnb-listing") {
+    const { values: v } = parseArgs({
+      args,
+      options: {
+        id: { type: "string" },
+        "check-in": { type: "string" },
+        "check-out": { type: "string" },
+        adults: { type: "string" },
+      },
+      strict: true,
+    });
+    if (!v.id) throw new Error(help);
+    return airbnb.listing(v.id, { checkIn: v["check-in"], checkOut: v["check-out"], adults: Number(v.adults ?? 2) });
+  }
   if (command === "hotelist") {
     const { values: v } = parseArgs({
       args,
