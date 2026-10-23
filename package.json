@@ -10,11 +10,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "bun lint",
     "fix": "bun lint --fix && bun fmt",
-    "flights": "bun src/flights/cli.ts",
     "skills:install": "bun scripts/install.ts",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "maps": "bun src/maps/cli.ts"
+    "travel": "bun src/travel/cli.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

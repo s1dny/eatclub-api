@@ -27,31 +27,19 @@ bun run eatclub live bar-bruno
 
 [Skill](skills/eatclub/SKILL.md) · [API reference](skills/eatclub/references/api.md)
 
-## Google Flights
+## Travel
 
-Flight searches, airport and city lookup, booking offers and flexible-date prices.
-
-```sh
-bun run flights help
-bun run flights autocomplete --query Tokyo
-bun run flights search --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
-bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 2026-12-31 --min-days 6 --max-days 8 --currency AUD
-```
-
-`filters` lists search options. `endpoints --discover` lists service methods. Date-grid responses and checkpoints are stored in `data/flights/`.
-
-[Skill](skills/flights/SKILL.md) · [API reference](skills/flights/references/api.md)
-
-## Maps
-
-Local website template: Google satellite map, colour-coded pins that open Google's own place card, and Google drive routes.
+Trip research in one CLI: Google Flights date grids and itineraries, Google Hotels prices, Hotelist quality ratings, Google Maps place and nearby search, and a satellite map website with Google place cards and drive routes.
 
 ```sh
-bun run maps init /absolute/path/to/new-map
-bun run maps place --query "Phuket International Airport"
+bun run travel help
+bun run travel flights grid --origin SYD --destination HKT,DPS --start 2026-12-01 --end 2026-12-31
+bun run travel hotels google --query "Kata Beach Phuket resorts" --check-in 2026-12-01 --check-out 2026-12-07
+bun run travel places nearby --lat 7.8269 --lng 98.2992 --types cafe
+bun run travel map init /absolute/path/to/trip-map
 ```
 
-[Skill and Google Cloud setup](skills/maps/SKILL.md)
+[Skill](skills/travel/SKILL.md) · references: [flights](skills/travel/references/flights.md), [hotels](skills/travel/references/hotels.md), [places](skills/travel/references/places.md), [map](skills/travel/references/map.md)
 
 ## Development
 

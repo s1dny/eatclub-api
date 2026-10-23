@@ -21,7 +21,7 @@ Search and booking use the shared library's HTTP transport and browser fallback 
 
 ## Date grid
 
-`src/flights/api.ts` uses the shared shopping/calendar builders and extends the calendar request's last field to a native stay interval:
+`src/travel/flights/api.ts` uses the shared shopping/calendar builders and extends the calendar request's last field to a native stay interval:
 
 ```text
 [
@@ -73,7 +73,7 @@ raw/<from>_<to>.json:
 
 ## Service inventory
 
-`bun run flights endpoints --discover` loads the live Flights document, fetches its first-party `boq-travel` script bundle and extracts `FlightsFrontendService/<method>` references. The output includes source URLs and fetch time. This is an inventory of methods advertised by that bundle, not proof of every request schema, every lazily loaded module or every backend endpoint.
+`bun run travel flights endpoints --discover` loads the live Flights document, fetches its first-party `boq-travel` script bundle and extracts `FlightsFrontendService/<method>` references. The output includes source URLs and fetch time. This is an inventory of methods advertised by that bundle, not proof of every request schema, every lazily loaded module or every backend endpoint.
 
 | Method                             | Access                                           |
 | ---------------------------------- | ------------------------------------------------ |
@@ -95,7 +95,7 @@ raw/<from>_<to>.json:
 ### Raw requests
 
 ```sh
-bun run flights rpc --method GetCalendarGraph --payload request.json --currency AUD
+bun run travel flights rpc --method GetCalendarGraph --payload request.json --currency AUD
 ```
 
 `request.json` contains the inner array shown above, without form encoding or the outer `[null,"…"]` wrapper. Raw access accepts any alphanumeric method under FlightsFrontendService, including newly discovered methods. It returns the unmodified payloads and response text. Supplying a method name alone is not enough; requests requiring selection/booking tokens need values from the same search session.

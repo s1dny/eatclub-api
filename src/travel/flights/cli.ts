@@ -24,14 +24,14 @@ import {
 } from "./api.ts";
 
 const help = `flights — Google Flights for agents
-  bun run flights grid --origin SYD --destination NRT[,HKT,DPS] --start 2026-11-01 --end 2026-12-31 [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
-  bun run flights search --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
-  bun run flights autocomplete --query Tokyo
-  bun run flights booking --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08 --select 1 --select-return 1
-  bun run flights filters
-  bun run flights endpoints [--discover]
-  bun run flights rpc --method GetCalendarPicker --payload request.json
-  bun run flights scan --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
+  bun run travel flights grid --origin SYD --destination NRT[,HKT,DPS] --start 2026-11-01 --end 2026-12-31 [--min-days 6 --max-days 8] [--out data/flights/tokyo] [--resume]
+  bun run travel flights search --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
+  bun run travel flights autocomplete --query Tokyo
+  bun run travel flights booking --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08 --select 1 --select-return 1
+  bun run travel flights filters
+  bun run travel flights endpoints [--discover]
+  bun run travel flights rpc --method GetCalendarPicker --payload request.json
+  bun run travel flights scan --origin SYD --destination NRT --departure 2026-11-01 --return 2026-11-08
 Grid inputs are configurable. Defaults: 6–8 calendar days, AUD, 1 adult, economy.
 Common filters: --currency AUD --adults 1 --cabin-class economy --max-stops non-stop --airlines QF,JQ --checked-bags 1
 Additional filters are listed by 'filters'. --filters file.json accepts the complete filter object.
@@ -56,9 +56,8 @@ async function save(out: string, result: GridResult) {
   result.missing = missingCells(result);
   await atomic(join(out, "grid.json"), JSON.stringify(result, null, 2));
 }
-async function main() {
-  const args = Bun.argv.slice(2),
-    command = args.shift();
+export async function main(args: string[]) {
+  const command = args.shift();
   if (!command || command === "help" || args.includes("--help")) {
     console.log(help);
     return;
@@ -211,7 +210,3 @@ async function main() {
     return { ...result, out };
   }
 }
-await main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
