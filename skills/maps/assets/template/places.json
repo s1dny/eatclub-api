@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Phuket (Kata) · ≈$1,331 pp",
+    "places": [
+      {
+        "kind": "airport",
+        "name": "Phuket International Airport",
+        "placeId": "ChIJCQ93jJhIUDAR0DDUaWtBtOU",
+        "lat": 8.1053402,
+        "lng": 98.305429
+      },
+      {
+        "kind": "hotel",
+        "name": "Aurico Kata Resort & Spa",
+        "placeId": "ChIJ_aGbFMglUDARLBFvzo4Mc-M",
+        "lat": 7.8268804,
+        "lng": 98.2991687
+      }
+    ],
+    "routes": [[0, 1]]
+  }
+]

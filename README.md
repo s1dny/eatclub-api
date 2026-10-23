@@ -44,13 +44,14 @@ bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 202
 
 ## Maps
 
-Builds a Google Earth KML from a small JSON file: colour-coded groups of pins with photo popups and OSRM driving routes. No API key.
+Local website template: Google satellite map, colour-coded pins that open Google's own place card, and Google drive routes.
 
 ```sh
-bun run maps kml --in map.json --out map.kml
+bun run maps init /absolute/path/to/new-map
+bun run maps place --query "Phuket International Airport"
 ```
 
-[Skill](skills/maps/SKILL.md)
+[Skill and Google Cloud setup](skills/maps/SKILL.md)
 
 ## Development
 

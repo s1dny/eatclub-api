@@ -142,51 +142,22 @@ describe("flights grid", () => {
   });
 });
 
-describe("maps kml", () => {
-  test("builds colour-coded pins and a real drive", async () => {
-    const dir = `/tmp/maps-e2e-${Date.now()}`;
-    await Bun.write(
-      `${dir}/map.json`,
-      JSON.stringify({
-        name: "Test",
-        groups: [
-          {
-            name: "Sydney",
-            color: "#ff0000",
-            places: [
-              { id: "a", name: "Sydney Airport", lat: -33.9399, lng: 151.1753, icon: "airport" },
-              {
-                id: "b",
-                name: "Bondi",
-                lat: -33.8915,
-                lng: 151.2767,
-                icon: "hotel",
-                photo: "https://example.com/p.jpg",
-              },
-            ],
-            drives: [{ from: "a", to: "b" }],
-          },
-        ],
-      }),
-    );
-    const r = await run("run", "maps", "kml", "--in", `${dir}/map.json`, "--out", `${dir}/map.kml`);
-    expect(r.code).toBe(0);
-    const { groups } = JSON.parse(r.out);
-    expect(groups[0].drives[0].minutes).toBeGreaterThan(5);
-    const kml = await Bun.file(`${dir}/map.kml`).text();
-    expect(kml).toContain("icon?color=ff0000&amp;id=2011");
-    expect(kml).toContain("card_template.kml#main");
-    expect(kml).toContain("<gx:imageUrl>https://example.com/p.jpg</gx:imageUrl>");
-    expect(kml).toContain("<LineString>");
-  });
-});
-
-describe("maps place", () => {
-  test("finds a Google Maps place with the ids Earth links to", async () => {
+describe("maps", () => {
+  test("place finds Google place ids", async () => {
     const r = await run("run", "maps", "place", "--query", "Sydney Airport");
     expect(r.code).toBe(0);
     const [top] = JSON.parse(r.out);
-    expect(top.fid).toMatch(/^0x[0-9a-f]+:0x[0-9a-f]+$/);
+    expect(top.placeId).toMatch(/^ChIJ/);
     expect(Math.abs(top.lat + 33.94)).toBeLessThan(0.05);
   });
+
+  test("init creates a template that installs and typechecks", async () => {
+    const dir = `/tmp/maps-e2e-${Date.now()}`;
+    const r = await run("run", "maps", "init", dir);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.out).keyConfigured).toBe(true);
+    const sh = (cmd: string[]) => Bun.spawn(cmd, { cwd: dir, stdout: "pipe", stderr: "pipe" }).exited;
+    expect(await sh(["bun", "install"])).toBe(0);
+    expect(await sh(["bun", "run", "typecheck"])).toBe(0);
+  }, 120000);
 });

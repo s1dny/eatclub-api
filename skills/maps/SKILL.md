@@ -1,22 +1,39 @@
 ---
 name: maps
-description: Build a KML file for Google Earth of colour-coded pins (airports, hotels, places) with photo/detail cards and real driving routes. Free; no API key.
+description: Local website with a Google satellite map, colour-coded pins that open Google's own place card (photos, reviews, prices) and Google drive routes between places. Bun + TypeScript template.
 ---
 
 Resolve this skill's real directory through symlinks. The repository root is two directories above it. Run from the root:
 
 ```sh
-bun run maps help                                   # input schema
-bun run maps place --query "Phuket International Airport"   # Google Maps search → lat/lng, fid, mid, placeId
-bun run maps kml --in map.json --out ~/Downloads/map.kml
+bun run maps init /absolute/path/to/new-map              # copies assets/template, writes .env.local with the key
+bun run maps place --query "Phuket International Airport" # name, placeId, lat, lng, types
 ```
 
-Write `map.json` with real data gathered for the task (e.g. fares and dates from the flights skill's `grid`/`search`, hotels from Google Hotels via `google-travel-website-api`), then build the KML. Look up every real place with `maps place` and copy its `lat`/`lng`, `fid` and `mid` into the place. Check the result's name and categories match. Add its `mapsUrl` as a "Google Maps" link so the full Google listing is one click away.
+In the new folder: `bun install`, then `bun run dev` → http://localhost:3000 (the key only works on port 3000).
 
-- One `group` per option, e.g. one destination: its airport, hotel and drive share a colour (auto-assigned or `#rrggbb`). Put the comparison number in the group name, e.g. `Phuket · ≈$1,331 pp`.
-- Each place's card shows its `photo` (Earth photo carousel; check the URL returns an image), `details` rows, `links` and optional simple `html` (div, b, br, a). Icons: airport, hotel, food, hike, beach, pin.
-- Imported pins never show Google's own place card, even with `fid`/`mid` (tested 2026-10-23); only places saved from Earth's search do. Don't promise it.
-- The output mirrors Google Earth's own KML export (card-template styles, `gx:Carousel`, Earth icon set). Earth projects drop descriptions and photos written any other way.
-- `drives` are OSRM/OpenStreetMap road routes (no traffic). Their time and distance show on the line. Failures stop the build; never substitute straight lines.
+Edit `places.json`: one group per option, e.g. a destination. A group's pins and route lines share its colour.
 
-The user opens it at earth.google.com → New → Import file to map project → Upload from device (needs their Google sign-in). Hand them the file path and these steps.
+```json
+[
+  {
+    "name": "Phuket · ≈$1,331 pp",
+    "color": "#00acc1",
+    "places": [
+      { "kind": "airport", "name": "…", "placeId": "ChIJ…", "lat": 8.1, "lng": 98.3 },
+      { "kind": "hotel", "name": "…", "placeId": "ChIJ…", "lat": 7.8, "lng": 98.3 }
+    ],
+    "routes": [[0, 1]]
+  }
+]
+```
+
+- Get every `placeId`/`lat`/`lng` from `maps place`. Check the returned name and types match.
+- Clicking a pin shows Google's own place card (Places UI Kit `<gmp-place-details>`). Don't add custom text to pins; put comparison numbers in the group name. `kind` airport/hotel sets the pin glyph.
+- `routes` are Google Routes API drives between place indexes; drive time is added to the legend.
+- `?place=<placeId>` opens a card on load. Edit `map.ts`/`index.html` freely for the task.
+- Check it in a real browser before reporting it done: the map, a card and a route line. Headless browsers can't render the map.
+
+## Google Cloud
+
+The key is `GOOGLE_MAPS_API_KEY` in the repository `.env` (project `trip-maps-512505`, account plarza@plarza.com, managed with `gcloud services api-keys`). It's restricted to `http://localhost:3000/*` and `http://127.0.0.1:3000/*` and to these APIs, all enabled: Maps JavaScript (`maps-backend`), Places API (New) (`places`), Places UI Kit (`placewidgets`) and Routes (`routes`). Without `placewidgets` the card fails with a 403 on `GetPlaceWidget`. Personal use stays inside Google's free monthly usage; an AUD 1 budget alert is set.
