@@ -2,14 +2,14 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { type Client, createClient } from "@libsql/client";
 
-export const DB_PATH = resolve(process.env.EATCLUB_DB ?? new URL("../data/eatclub.db", import.meta.url).pathname);
+export const DB_PATH = resolve(process.env.EATCLUB_DB ?? new URL("../../data/eatclub.db", import.meta.url).pathname);
 
 export function open(path = DB_PATH): Client {
   mkdirSync(dirname(path), { recursive: true });
   return createClient({ url: `file:${path}` });
 }
 
-/** Keep in sync with the schema section of README.md. */
+/** Keep in sync with the schema section of docs/eatclub.md. */
 export const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 

@@ -1,12 +1,12 @@
-Bun + TypeScript. Use `bun`, `bun test`; no Node tooling.
+Bun + TypeScript. Use `bun`, not Node tooling.
 
-The product is `data/eatclub.db` (libSQL) plus `README.md`, which is the agent-facing schema doc. Keep `README.md` in sync with `SCHEMA` in `src/db.ts`.
+This repository contains data-only skills backed by reverse-engineered APIs. Return original responses and structured data. The caller decides how to use or display them. Do not add UI, answer templates, rankings or recommendation policies to skills.
 
-- `src/eatclub.ts`: website client (JSON listing + venue-page RSC). Venue pages dedupe objects into `"$row:path"` refs, so `resolveRefs` runs before parsing. The region filter takes display names ("Gold Coast"), not slugs.
-- `src/app.ts` + `src/graphql/`: app AppSync API; key in `.env` (`EATCLUB_APP_API_KEY`). The app only lists some regions (sydney yes, newcastle/wollongong no). `allDealsForRestaurant` uses the UTC date, so live state goes through `dealForId` per deal.
-- `src/sync.ts`: full rebuild into a temp DB, then an atomic rename; calls `refreshLive`.
-- `src/live.ts`: today's live deal state + discount exclusions; `bun run live <slug…>` scopes it to a shortlist.
-- `src/map.ts` + `src/graph.ts`: one-time build of `data/walk-graph.bin` (CSR walking network) from an OSM .pbf; `src/walk.ts` runs Dijkstra in-process → `walk_times`. No routing servers or Docker.
-- `src/sql.ts`: read-only query CLI.
-- Tests live in `tests/` and run the CLIs end to end against the synced DB.
-- Scope is NSW, manual refresh only, local file. Location always comes from the caller. No MCP layer.
+- `skills/<name>/SKILL.md`: agent entry points. Resolve the real skill directory through symlinks; repository root is `../..`.
+- `src/eatclub/`: existing EatClub website/AppSync clients, sync, local walking graph and read-only SQL CLI. `docs/eatclub.md` must match `SCHEMA` in `src/eatclub/db.ts`.
+- `src/flights/`: Google Flights client and data-only CLI. Protocol and verified endpoint scope: `skills/flights/references/api.md`.
+- `scripts/install.ts`: global skill symlinks; back up differing existing entries.
+- Local caches and original responses live under ignored `data/`; never commit secrets, session proofs or personal searches.
+- EatClub venue pages contain RSC `$row:path` refs; resolve before parsing. AppSync key is in `.env` as `EATCLUB_APP_API_KEY`. Live availability is today-only and refreshes a shortlist, never every NSW venue for a user query.
+- Flight HTTP 200 can contain a gRPC error or no payload. Never turn those into no-flights results. Save partial range checkpoints and stop on errors; do not hammer blocked endpoints.
+- Keep tests top-level and end to end. Do not add tests for skills still being prototyped.

@@ -12,7 +12,7 @@ const longitude = Number(lngArg);
 const maxIdx = rest.indexOf("--max");
 const max = maxIdx >= 0 ? Number(rest[maxIdx + 1]) : 15;
 if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !(max > 0)) {
-  console.error("usage: bun src/walk.ts <lat> <lng> [--max minutes]");
+  console.error("usage: bun run walk <lat> <lng> [--max minutes]");
   process.exit(2);
 }
 

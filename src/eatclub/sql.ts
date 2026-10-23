@@ -6,7 +6,7 @@ const args = Bun.argv.slice(2);
 const json = args.includes("--json");
 const sql = args.filter((a) => a !== "--json").join(" ") || (await Bun.stdin.text());
 if (!sql.trim()) {
-  console.error('usage: bun src/sql.ts [--json] "SELECT …"   (or pipe SQL on stdin)');
+  console.error('usage: bun run sql [--json] "SELECT …"   (or pipe SQL on stdin)');
   process.exit(2);
 }
 

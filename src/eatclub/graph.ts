@@ -11,7 +11,7 @@
 import { resolve } from "node:path";
 
 export const GRAPH_PATH = resolve(
-  process.env.EATCLUB_GRAPH ?? new URL("../data/walk-graph.bin", import.meta.url).pathname,
+  process.env.EATCLUB_GRAPH ?? new URL("../../data/walk-graph.bin", import.meta.url).pathname,
 );
 
 /** Typical urban walking pace, 4.8 km/h. */

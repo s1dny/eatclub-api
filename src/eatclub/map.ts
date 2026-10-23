@@ -10,7 +10,7 @@ import { createOSMStream } from "osm-pbf-parser-node";
 import { encodeGraph, GRAPH_PATH, haversine } from "./graph.ts";
 import { log } from "./util.ts";
 
-const input = Bun.argv[2] ?? new URL("../data/osm/australia-latest.osm.pbf", import.meta.url).pathname;
+const input = Bun.argv[2] ?? new URL("../../data/osm/australia-latest.osm.pbf", import.meta.url).pathname;
 const [south, west, north, east] = (process.env.EATCLUB_MAP_BBOX ?? "-34.65,150.4,-32.6,152.0")
   .split(",")
   .map(Number) as [number, number, number, number];

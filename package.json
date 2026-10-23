@@ -1,22 +1,25 @@
 {
-  "name": "eatclub-api",
+  "name": "agent-skills",
   "version": "0.1.0",
-  "description": "EatClub NSW venues, deals, live availability and menus in a libSQL database for agents to query",
+  "description": "Reusable agent skills with local CLIs: EatClub and Google Flights",
   "type": "module",
   "private": true,
   "scripts": {
-    "sync": "bun src/sync.ts",
-    "live": "bun src/live.ts",
-    "walk": "bun src/walk.ts",
-    "sql": "bun src/sql.ts",
+    "sync": "bun src/eatclub/sync.ts",
+    "live": "bun src/eatclub/live.ts",
+    "walk": "bun src/eatclub/walk.ts",
+    "sql": "bun src/eatclub/sql.ts",
     "test": "bun test --timeout 120000",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "fix": "biome check --write .",
-    "map": "bun src/map.ts"
+    "map": "bun src/eatclub/map.ts",
+    "flights": "bun src/flights/cli.ts",
+    "skills:install": "bun scripts/install.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
+    "google-travel-website-api": "0.5.2",
     "osm-pbf-parser-node": "^1.1.4",
     "zod": "^4.6.7"
   },
