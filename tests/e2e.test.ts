@@ -174,8 +174,9 @@ describe("maps kml", () => {
     const { groups } = JSON.parse(r.out);
     expect(groups[0].drives[0].minutes).toBeGreaterThan(5);
     const kml = await Bun.file(`${dir}/map.kml`).text();
-    expect(kml).toContain("<color>ff0000ff</color>");
-    expect(kml).toContain('<img src="https://example.com/p.jpg"');
+    expect(kml).toContain("icon?color=ff0000&amp;id=2011");
+    expect(kml).toContain("card_template.kml#main");
+    expect(kml).toContain("<gx:imageUrl>https://example.com/p.jpg</gx:imageUrl>");
     expect(kml).toContain("<LineString>");
   });
 });

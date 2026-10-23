@@ -13,7 +13,8 @@ Input JSON:
                    "links": { "Book": "https://…" }, "html": "optional extra HTML" }],
       "drives": [{ "from": "hkt", "to": "hotel" }] }] }
 
-Each group's pins and drive lines share its colour. Drives are OSRM (OpenStreetMap) road routes; their time and
+Output follows Google Earth's own KML export (card template styles, gx:Carousel photos, Earth icons), so
+descriptions and photos show in Earth's info card. Each group's pins and drive lines share its colour. Drives are OSRM (OpenStreetMap) road routes; their time and
 distance are added to the destination place's details. Prints a JSON summary; failures exit non-zero.`;
 
 type Place = {
@@ -30,14 +31,10 @@ type Place = {
 type Group = { name: string; color?: string; places: Place[]; drives?: { from: string; to: string }[] };
 type Input = { name: string; description?: string; groups: Group[] };
 
-const icons = {
-  airport: "airports",
-  hotel: "lodging",
-  food: "dining",
-  hike: "hiker",
-  beach: "swimming",
-  pin: "placemark_circle",
-} as const;
+// Google Earth's own icon set (earth.google.com/earth/document/icon?id=N), tinted per group.
+const icons = { airport: 2011, hotel: 2099, food: 2130, hike: 2071, beach: 2039, pin: 2000 } as const;
+// Earth's info card only renders description and carousel when the style uses its card template (as in Earth's own KML export).
+const CARD = "https://earth.google.com/balloon_components/base/1.0.26.0/card_template.kml#main";
 const palette = [
   "#e6194b",
   "#3cb44b",
@@ -78,26 +75,22 @@ async function drive(from: Place, to: Place) {
   }
 }
 
-function balloon(place: Place, color: string) {
-  const rows = Object.entries(place.details ?? {})
-    .map(
-      ([k, v]) =>
-        `<tr><td style="color:#666;padding:2px 10px 2px 0;vertical-align:top">${esc(k)}</td><td>${esc(v)}</td></tr>`,
-    )
-    .join("");
-  const links = Object.entries(place.links ?? {})
-    .map(([k, v]) => `<a href="${esc(v)}" target="_blank">${esc(k)}</a>`)
-    .join(" · ");
-  return [
-    `<div style="font-family:sans-serif;max-width:360px;border-top:4px solid ${color};padding-top:6px">`,
-    place.photo
-      ? `<img src="${esc(place.photo)}" width="360" style="border-radius:6px;display:block;margin-bottom:6px">`
-      : "",
-    rows ? `<table style="font-size:13px;border-collapse:collapse">${rows}</table>` : "",
-    links ? `<p style="font-size:13px">${links}</p>` : "",
-    place.html ?? "",
-    "</div>",
-  ].join("");
+/** Description in the simple HTML Earth itself exports (div, b, br, a). Photos go in the carousel, not here. */
+function description(place: Place) {
+  const rows = Object.entries(place.details ?? {}).map(([k, v]) => `<div><b>${esc(k)}:</b> ${esc(v)}</div>`);
+  const links = Object.entries(place.links ?? {}).map(([k, v]) => `<a href="${esc(v)}">${esc(k)}</a>`);
+  return [...rows, links.length ? `<div><br>${links.join(" · ")}</div>` : "", place.html ?? ""].join("");
+}
+
+function style(id: string, color: string, icon?: number) {
+  const rgb = color.slice(1).toLowerCase();
+  return (
+    `<gx:CascadingStyle kml:id="${id}"><styleUrl>${CARD}</styleUrl><Style>` +
+    (icon
+      ? `<IconStyle><scale>1.2</scale><Icon><href>https://earth.google.com/earth/document/icon?color=${rgb}&amp;id=${icon}&amp;scale=4</href></Icon><hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/></IconStyle>`
+      : "") +
+    `<LabelStyle/><LineStyle><color>${kmlColor(color)}</color><width>5</width></LineStyle></Style></gx:CascadingStyle>`
+  );
 }
 
 async function kml(input: Input) {
@@ -107,7 +100,7 @@ async function kml(input: Input) {
   const summary = [];
   for (const [g, group] of input.groups.entries()) {
     const color = group.color ?? palette[g % palette.length]!;
-    const kc = kmlColor(color);
+    kmlColor(color); // validate
     const byId = new Map(group.places.map((p) => [p.id, p]));
     if (byId.size !== group.places.length) throw new Error(`Duplicate place id in ${group.name}`);
     const lines: string[] = [];
@@ -120,28 +113,28 @@ async function kml(input: Input) {
       b.details = { ...b.details, [`Drive from ${a.name}`]: `${d.minutes} min · ${d.km} km` };
       drives.push({ from, to, minutes: d.minutes, km: d.km });
       lines.push(
-        `<Placemark><name>${esc(`${a.name} → ${b.name}: ${d.minutes} min`)}</name><styleUrl>#line${g}</styleUrl>` +
+        `<Placemark><name>${esc(`${a.name} → ${b.name}: ${d.minutes} min`)}</name><styleUrl>#g${g}_line</styleUrl>` +
           `<description>${cdata(`${d.minutes} min · ${d.km} km by car (OpenStreetMap estimate, no traffic)`)}</description>` +
           `<LineString><tessellate>1</tessellate><coordinates>${d.path.map(([lo, la]) => `${lo},${la},0`).join(" ")}</coordinates></LineString></Placemark>`,
       );
       await Bun.sleep(1100); // OSRM demo server: about one request per second
     }
-    styles.push(`<Style id="line${g}"><LineStyle><color>${kc}</color><width>5</width></LineStyle></Style>`);
-    const pins = group.places.map((p) => {
+    styles.push(style(`g${g}_line`, color));
+    const pins = group.places.map((p, i) => {
       const icon = icons[p.icon ?? "pin"];
       if (!icon) throw new Error(`Unknown icon ${p.icon}`);
-      const id = `pin${g}_${icon}`;
-      if (!styles.some((s) => s.includes(`id="${id}"`)))
-        styles.push(
-          `<Style id="${id}"><IconStyle><color>${kc}</color><scale>1.3</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/${icon}.png</href></Icon></IconStyle><LabelStyle><color>${kc}</color></LabelStyle></Style>`,
-        );
-      return `<Placemark><name>${esc(p.name)}</name><styleUrl>#${id}</styleUrl><description>${cdata(balloon(p, color))}</description><Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
+      const id = `g${g}_${icon}`;
+      if (!styles.some((s) => s.includes(`kml:id="${id}"`))) styles.push(style(id, color, icon));
+      const carousel = p.photo
+        ? `<gx:Carousel><gx:Image kml:id="img_${g}_${i}"><gx:imageUrl>${esc(p.photo)}</gx:imageUrl></gx:Image></gx:Carousel>`
+        : "";
+      return `<Placemark><name>${esc(p.name)}</name><description>${cdata(description(p))}</description><styleUrl>#${id}</styleUrl>${carousel}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
     });
     folders.push(`<Folder><name>${esc(group.name)}</name>${pins.join("")}${lines.join("")}</Folder>`);
     summary.push({ group: group.name, color, places: group.places.length, drives });
   }
   const doc =
-    `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(input.name)}</name>` +
+    `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2"><Document><name>${esc(input.name)}</name>` +
     (input.description ? `<description>${cdata(input.description)}</description>` : "") +
     `${styles.join("")}${folders.join("")}</Document></kml>\n`;
   return { doc, summary };
