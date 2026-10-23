@@ -180,3 +180,13 @@ describe("maps kml", () => {
     expect(kml).toContain("<LineString>");
   });
 });
+
+describe("maps place", () => {
+  test("finds a Google Maps place with the ids Earth links to", async () => {
+    const r = await run("run", "maps", "place", "--query", "Sydney Airport");
+    expect(r.code).toBe(0);
+    const [top] = JSON.parse(r.out);
+    expect(top.fid).toMatch(/^0x[0-9a-f]+:0x[0-9a-f]+$/);
+    expect(Math.abs(top.lat + 33.94)).toBeLessThan(0.05);
+  });
+});

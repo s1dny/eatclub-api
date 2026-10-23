@@ -1,6 +1,8 @@
 import { parseArgs } from "node:util";
 
 const help = `maps — build a KML file for Google Earth (earth.google.com → New → Import file to map project)
+  bun run maps place --query "Phuket International Airport"   # Google Maps search: name, lat/lng, fid, mid, placeId
+    (an exact single match returns kind "exact" with name+address, fid and coordinates only)
   bun run maps kml --in map.json --out map.kml
 
 Input JSON:
@@ -19,6 +21,9 @@ distance are added to the destination place's details. Prints a JSON summary; fa
 
 type Place = {
   id: string;
+  /** Google Maps feature id (0x…:0x…) and knowledge-graph mid (/g/…) from `maps place`; links the pin to Google's listing. */
+  fid?: string;
+  mid?: string;
   name: string;
   lat: number;
   lng: number;
@@ -128,7 +133,8 @@ async function kml(input: Input) {
       const carousel = p.photo
         ? `<gx:Carousel><gx:Image kml:id="img_${g}_${i}"><gx:imageUrl>${esc(p.photo)}</gx:imageUrl></gx:Image></gx:Carousel>`
         : "";
-      return `<Placemark><name>${esc(p.name)}</name><description>${cdata(description(p))}</description><styleUrl>#${id}</styleUrl>${carousel}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
+      const ids = (p.mid ? `<gx:mid>${esc(p.mid)}</gx:mid>` : "") + (p.fid ? `<gx:fid>${esc(p.fid)}</gx:fid>` : "");
+      return `<Placemark><name>${esc(p.name)}</name><description>${cdata(description(p))}</description>${ids}<styleUrl>#${id}</styleUrl>${carousel}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`;
     });
     folders.push(`<Folder><name>${esc(group.name)}</name>${pins.join("")}${lines.join("")}</Folder>`);
     summary.push({ group: group.name, color, places: group.places.length, drives });
@@ -140,9 +146,52 @@ async function kml(input: Input) {
   return { doc, summary };
 }
 
+/** Google Maps search, as the Maps web app calls it. Returns places with the ids Earth uses to link Google's listing. */
+async function place(query: string) {
+  const url = `https://www.google.com/search?tbm=map&hl=en&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/130 Safari/537.36" },
+  });
+  const text = await response.text();
+  if (!response.ok || !text.startsWith(")]}'")) throw new Error(`Google Maps search failed: HTTP ${response.status}`);
+  const data = JSON.parse(text.slice(text.indexOf("\n") + 1));
+  const rows: any[] = (data?.[0]?.[1] ?? []).map((r: any) => r?.[14]).filter((r: any) => Array.isArray(r) && r[10]);
+  if (!rows.length) {
+    // An exact single match comes back in a different slot, with name + address and the same fid as the listing.
+    const geo = data?.[37]?.[2]?.[0];
+    if (geo?.[2])
+      return [
+        {
+          kind: "address",
+          name: geo[4] as string,
+          lat: geo[3]?.[2] as number,
+          lng: geo[3]?.[3] as number,
+          fid: geo[2] as string,
+        },
+      ];
+    throw new Error(`No Google Maps place for "${query}"`);
+  }
+  return rows.slice(0, 5).map((r) => ({
+    kind: "place",
+    name: r[11] as string,
+    categories: r[13] as string[] | null,
+    address: r[39] as string | null,
+    lat: r[9]?.[2] as number,
+    lng: r[9]?.[3] as number,
+    fid: r[10] as string,
+    mid: (r[89] as string | null) ?? undefined,
+    placeId: r[78] as string | null,
+    mapsUrl: r[78] ? `https://www.google.com/maps/place/?q=place_id:${r[78]}` : null,
+  }));
+}
+
 const [command, ...rest] = Bun.argv.slice(2);
 if (!command || command === "help" || command === "--help") {
   console.log(help);
+} else if (command === "place") {
+  const { values } = parseArgs({ args: rest, options: { query: { type: "string" } }, strict: true });
+  if (!values.query) throw new Error(help);
+  console.log(JSON.stringify(await place(values.query), null, 2));
 } else if (command === "kml") {
   const { values } = parseArgs({
     args: rest,
