@@ -193,6 +193,25 @@ describe("travel", () => {
     expect(cozy.every((s: any) => s.site && /^https:/.test(s.url) && !s.url.includes("%CLICK_ID%"))).toBe(true);
   }, 240000);
 
+  test("Airbnb searches the named place even when its free-text search can't resolve it", async () => {
+    const r = await travel(
+      "hotels",
+      "search",
+      "--location",
+      "Ao Nang, Thailand",
+      "--sources",
+      "airbnb",
+      "--check-in",
+      "2026-12-02",
+      "--check-out",
+      "2026-12-09",
+      "--entire",
+    );
+    expect(r.sources.airbnb.place).toMatch(/Ao Nang/);
+    expect(r.sources.airbnb.found).toBeGreaterThan(5);
+    expect(r.stays.every((s: any) => Math.abs(s.lat - 8.04) < 0.3 && Math.abs(s.lng - 98.82) < 0.3)).toBe(true);
+  }, 120000);
+
   test("hotels details reads Agoda beds per room and Airbnb amenities", async () => {
     const { stays } = await travel(
       "hotels",
