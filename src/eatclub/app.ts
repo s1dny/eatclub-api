@@ -40,7 +40,7 @@ export type AppRestaurant = z.infer<typeof AppRestaurant> & Record<string, unkno
 /** Every venue the app lists in a region (1000 per page). Only some regions are served. */
 export async function appRestaurants(region: string, date: string): Promise<AppRestaurant[]> {
   const out: AppRestaurant[] = [];
-  for (let page = 1; page > 0; ) {
+  for (let page = 1; page > 0;) {
     const { restaurants } = await gql(
       "restaurants",
       { region, page, dates: [date] },

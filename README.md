@@ -2,12 +2,13 @@
 
 Reusable, data-only agent skills backed by reverse-engineered website APIs. Each skill documents its requests, data structures and limitations and provides a CLI. The calling agent chooses how to interpret and present the data. No UI, MCP server, recommendation policy or answer formatting.
 
-| Skill | Data | Entry point |
-| --- | --- | --- |
-| [eatclub](skills/eatclub/SKILL.md) | NSW venues, weekly deals, menus, walking distances, today's live availability | `bun run sql`, `bun run live` |
-| [flights](skills/flights/SKILL.md) | Google Flights searches, booking offers, location lookup, date/price combinations and raw service requests | `bun run flights` |
+| Skill                              | Data                                                                                                       | Entry point                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| [eatclub](skills/eatclub/SKILL.md) | NSW venues, weekly deals, menus, walking distances, today's live availability                              | `bun run sql`, `bun run live` |
+| [flights](skills/flights/SKILL.md) | Google Flights searches, booking offers, location lookup, date/price combinations and raw service requests | `bun run flights`             |
 
 ```sh
+bun upgrade --canary
 bun install
 bun run skills:install
 ```
@@ -36,4 +37,4 @@ The existing database and walking graph remain in `data/`. Commands retain their
 
 Add `skills/<name>/SKILL.md`, protocol references when needed, and a namespaced client in `src/<name>/`. Keep endpoint evidence and limitations with that skill. Return API data without prescribing agent decisions or presentation. Register its CLI in `package.json` and its name in `scripts/install.ts`.
 
-`bun run typecheck` and `bun run lint` check the code. Existing EatClub end-to-end tests live in `tests/` and require its local synced database, walking graph and app API key. Flight development is verified with live CLI calls rather than prototype tests.
+Use Bun canary (`bun upgrade --canary`). `bun run lint` uses Bun's built-in linter; `bun run format` formats files and `bun run format:check` checks formatting. `bun run fix` applies lint fixes and formatting. `bun run typecheck` checks TypeScript. Existing EatClub end-to-end tests live in `tests/` and require its local synced database, walking graph and app API key. Flight development is verified with live CLI calls rather than prototype tests.

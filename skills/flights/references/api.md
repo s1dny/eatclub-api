@@ -37,15 +37,15 @@ There is no need for a request per departure/return pair. A three-day departure 
 
 Trip settings (zero-based indices):
 
-| Slot | Meaning |
-| --- | --- |
-| 2 | Trip type: 1 round trip, 2 one way |
-| 5 | Cabin: 1 economy, 2 premium economy, 3 business, 4 first |
-| 6 | Passenger counts; use the shared builder to preserve wire ordering |
-| 7 | Price filter |
-| 10 | Baggage requirements |
-| 13 | Trip segments |
-| 17 | Round-trip context flag |
+| Slot | Meaning                                                            |
+| ---- | ------------------------------------------------------------------ |
+| 2    | Trip type: 1 round trip, 2 one way                                 |
+| 5    | Cabin: 1 economy, 2 premium economy, 3 business, 4 first           |
+| 6    | Passenger counts; use the shared builder to preserve wire ordering |
+| 7    | Price filter                                                       |
+| 10   | Baggage requirements                                               |
+| 13   | Trip segments                                                      |
+| 17   | Round-trip context flag                                            |
 
 A segment carries origin and destination airport/entity sets at `[0]`/`[1]`, time filters `[2]`, stop filter `[3]`, airline includes/excludes `[4]`/`[5]`, travel date `[6]`, duration `[7]` and selected legs `[8]`. Use `filters` for accepted values rather than inventing enum codes. Unknown slots are kept null by the shared builder.
 
@@ -77,20 +77,20 @@ raw/<from>_<to>.json:
 
 The frontend advertised these methods during the 2026-10-23 investigation:
 
-| Method | Access / verification |
-| --- | --- |
-| GetShoppingResults | `search`; live itineraries and original responses verified |
-| GetBookingResults | `booking`; uses selection/booking tokens from a fresh search |
-| GetCalendarGrid | `grid` / `dates`; live native stay-range prices verified |
-| GetCalendarGraph | `rpc`; live fixed-stay request verified with the calendar payload above |
-| GetCalendarPicker | `rpc`; live fixed-stay request verified with the calendar payload above |
-| GetExploreDestinations | `rpc`; live destination payload verified; raw frames retained |
-| GetExploreDestinationFlightDetails | `rpc`; method observed, request schema not yet verified |
-| GetFlightDealsStreaming | `rpc`; request returned metadata frames but no deals in the probe; useful deal results remain unverified |
-| GetDealDestinationDetails | `rpc`; method observed, request schema not yet verified |
-| GetSolutionPrices | `rpc`; method observed, token-bound price refresh schema not yet verified |
-| GetPartnerLinkPrices | `rpc`; method observed, partner/token payload not yet verified |
-| GetDebugStream | `rpc`; method observed, diagnostic schema not yet verified |
+| Method                             | Access / verification                                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| GetShoppingResults                 | `search`; live itineraries and original responses verified                                               |
+| GetBookingResults                  | `booking`; uses selection/booking tokens from a fresh search                                             |
+| GetCalendarGrid                    | `grid` / `dates`; live native stay-range prices verified                                                 |
+| GetCalendarGraph                   | `rpc`; live fixed-stay request verified with the calendar payload above                                  |
+| GetCalendarPicker                  | `rpc`; live fixed-stay request verified with the calendar payload above                                  |
+| GetExploreDestinations             | `rpc`; live destination payload verified; raw frames retained                                            |
+| GetExploreDestinationFlightDetails | `rpc`; method observed, request schema not yet verified                                                  |
+| GetFlightDealsStreaming            | `rpc`; request returned metadata frames but no deals in the probe; useful deal results remain unverified |
+| GetDealDestinationDetails          | `rpc`; method observed, request schema not yet verified                                                  |
+| GetSolutionPrices                  | `rpc`; method observed, token-bound price refresh schema not yet verified                                |
+| GetPartnerLinkPrices               | `rpc`; method observed, partner/token payload not yet verified                                           |
+| GetDebugStream                     | `rpc`; method observed, diagnostic schema not yet verified                                               |
 
 `endpoints` without `--discover` also returns the dependency's broader flight endpoint catalog, including batchexecute autocomplete IDs and frontend support resources. Inventory is not a claim that telemetry, debug or undocumented methods are implemented as typed operations.
 

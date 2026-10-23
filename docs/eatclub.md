@@ -1,7 +1,7 @@
 # EatClub API data
 
 Every NSW [EatClub](https://eatclub.com.au/venues/) venue, deal, menu item and review in a local libSQL database, for an agent to query with SQL.
-Ask Claude Code things like *"healthy beef or lamb within a 10 min walk of -33.8688, 151.2093 with a deal at lunch"*.
+Ask Claude Code things like _"healthy beef or lamb within a 10 min walk of -33.8688, 151.2093 with a deal at lunch"_.
 
 There's no MCP server or tool schema to learn. The agent reads this file and writes queries
 ([why](https://www.anthropic.com/engineering/code-execution-with-mcp)).
@@ -33,58 +33,65 @@ Columns ending in `_json`, plus `options`, `tags`, `food_labels`, `venue_types`,
 `important_info` and `raw`, hold JSON. Use `json_extract` / `json_each`.
 
 ### venues
+
 One row per venue.
 
-| column | notes |
-| --- | --- |
-| `slug` (PK), `id` | `id` is EatClub's objectId (used by the app API) |
-| `name`, `region`, `description`, `bio` | `bio` is a longer write-up of the venue |
-| `address`, `suburb`, `state`, `postcode`, `latitude`, `longitude`, `timezone` | |
-| `phone`, `website`, `url`, `app_link` | `app_link` opens the venue in the EatClub app to claim a deal |
-| `rating`, `food_rating`, `atmosphere_rating`, `num_ratings` | 0–5, from EatClub diners |
-| `max_discount_pct` | best discount the venue offers |
-| `dining_type` | e.g. `Casual dining`, `Fine dining`, `Cafe`, `Quick service`, `Pub` *(app data)* |
-| `cost`, `food_labels`, `tags`, `venue_types`, `occasions` | extra classifications, often empty |
-| `offers_dine_in`, `offers_takeaway`, `offers_delivery`, `sells_out_early`, `cover_charge`, `is_new`, `excluded_item_count` | *(app data)* NULL if unknown |
-| `image`, `other_images`, `pdf_menu` | URLs |
-| `has_detail` | 0 = EatClub's venue page had no deals/menu data |
-| `web_json`, `app_json` | the complete raw records from the website and the app, for anything not broken out above |
+| column                                                                                                                     | notes                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `slug` (PK), `id`                                                                                                          | `id` is EatClub's objectId (used by the app API)                                         |
+| `name`, `region`, `description`, `bio`                                                                                     | `bio` is a longer write-up of the venue                                                  |
+| `address`, `suburb`, `state`, `postcode`, `latitude`, `longitude`, `timezone`                                              |                                                                                          |
+| `phone`, `website`, `url`, `app_link`                                                                                      | `app_link` opens the venue in the EatClub app to claim a deal                            |
+| `rating`, `food_rating`, `atmosphere_rating`, `num_ratings`                                                                | 0–5, from EatClub diners                                                                 |
+| `max_discount_pct`                                                                                                         | best discount the venue offers                                                           |
+| `dining_type`                                                                                                              | e.g. `Casual dining`, `Fine dining`, `Cafe`, `Quick service`, `Pub` _(app data)_         |
+| `cost`, `food_labels`, `tags`, `venue_types`, `occasions`                                                                  | extra classifications, often empty                                                       |
+| `offers_dine_in`, `offers_takeaway`, `offers_delivery`, `sells_out_early`, `cover_charge`, `is_new`, `excluded_item_count` | _(app data)_ NULL if unknown                                                             |
+| `image`, `other_images`, `pdf_menu`                                                                                        | URLs                                                                                     |
+| `has_detail`                                                                                                               | 0 = EatClub's venue page had no deals/menu data                                          |
+| `web_json`, `app_json`                                                                                                     | the complete raw records from the website and the app, for anything not broken out above |
 
-*App data* is only present for venues the app lists (Sydney); it's NULL for Newcastle and Wollongong.
+_App data_ is only present for venues the app lists (Sydney); it's NULL for Newcastle and Wollongong.
 
 ### venue_cuisines
+
 `slug`, `cuisine`. EatClub's tags, e.g. `Thai`, `Healthy`, `Salads`, `Vegan`, `Bar`. Run `SELECT DISTINCT cuisine` for the full list.
 
 ### hours
+
 `slug`, `day`, `open_min`, `close_min`, `kitchen_close_min`. One row per shift; venues can have two shifts a day.
 `close_min` can exceed 1440 when a venue is open past midnight. `kitchen_close_min` is app data.
 
 ### deals: the weekly schedule
+
 `deal_id`, `slug`, `day`, `start_min`, `end_min`, `all_day`, `discount` (e.g. `25% Off`), `discount_pct`,
 `type` (`dinein` / `takeaway`), `is_stunt` (limited promo).
 `all_day = 1` deals are valid all opening hours and expanded into one row per shift, so a `deal_id` can repeat.
 
 ### live_deals: today's state from the app
+
 One row per deal available today, fetched by `bun run live <slug…>` (and for every venue by `sync`). It covers the
 weekly schedule plus one-off and lightning deals the app lists for today that never appear in `deals`, so once you've
 run `live` on your shortlist, **read today's deals for those venues from `live_deals`**. Check `fetched_at`.
 Use `deals` for other days. `deal_id` matches `deals.deal_id`. `start_min = 0, end_min = 1440` means all day
 during opening hours; check `hours`.
 
-| column | notes |
-| --- | --- |
-| `qty_left`, `qty_total` | deals left to claim today; 0 = sold out |
-| `max_party_size` | |
-| `subheading` | what the discount covers, e.g. `The Total Bill Incl. Drinks` |
-| `terms`, `drinks_only_terms`, `important_info` | conditions; `important_info` is JSON `[{heading, text}]` (seating limits, best-value policy…) |
-| `new_customers_only`, `lightning`, `dine_in_only`, `takeaway_only`, `sells_out_early` | flags |
-| `last_booked_at`, `date`, `fetched_at`, `raw` | `raw` = full app record |
+| column                                                                                | notes                                                                                         |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `qty_left`, `qty_total`                                                               | deals left to claim today; 0 = sold out                                                       |
+| `max_party_size`                                                                      |                                                                                               |
+| `subheading`                                                                          | what the discount covers, e.g. `The Total Bill Incl. Drinks`                                  |
+| `terms`, `drinks_only_terms`, `important_info`                                        | conditions; `important_info` is JSON `[{heading, text}]` (seating limits, best-value policy…) |
+| `new_customers_only`, `lightning`, `dine_in_only`, `takeaway_only`, `sells_out_early` | flags                                                                                         |
+| `last_booked_at`, `date`, `fetched_at`, `raw`                                         | `raw` = full app record                                                                       |
 
 ### discount_exclusions
+
 What a venue's deal doesn't apply to today (happy hours, set menus, specials): `slug`, `date`, `category`, `description`,
 `applicable_days`, `items` (JSON), `raw`.
 
 ### menu_items + menu_fts
+
 `menu_items`: `id`, `slug`, `menu_type` (`dinein` / `takeaway` / `all`; the same dish often appears in both, so use `DISTINCT`),
 `menu_title`, `menu_start_min`/`menu_end_min` (NULL = all day), `category`, `title`, `description`, `price` (AUD),
 `no_discount` (1 = excluded from deals), `popularity`, `image`, `options` (JSON `[{option, required, max, choices:[{choice, price}]}]`
@@ -94,15 +101,18 @@ for add-ons, sizes and dietary swaps like gluten free).
 `menu_fts MATCH 'beef OR lamb'`, joined with `menu_items.id = menu_fts.rowid`.
 
 ### reviews
+
 `slug`, `date`, `stars`, `message`, `reviewer`, `deal_used`. Recent diner reviews (up to ~10 per venue).
 
 ### walk_times
+
 `slug`, `minutes`, `meters` along OpenStreetMap streets and footpaths from the last `bun run walk` origin
 (`meta.walk_origin`), at 4.8 km/h. Each run replaces the table. Walk time doesn't include waiting at crossings,
 so add a minute or two for busy roads. SQLite math functions (`sin`, `cos`, `acos`, `radians`) are available for
 straight-line distance, but walking time should come from `walk_times`.
 
 ### regions, meta
+
 `regions`: `slug`, `name`, `state`, `timezone`, `venue_count`.
 `meta`: `synced_at`, `live_fetched_at`, `states`, `venues`, `venues_without_detail`, `venues_with_app_data`, `walk_origin`.
 
@@ -166,6 +176,7 @@ cuisines; keyword search only narrows things down.
   - `excluded-items`: per-venue discount exclusions
 
   Set `EATCLUB_APP_API_KEY` in `.env`. To recover it, decompile the APK with jadx and read `res/ju.json` → `AppSync.Default.ApiKey`.
+
 - **Walking**: a local walking network built once by `bun run map` from OpenStreetMap
   (`data/osm/australia-latest.osm.pbf` from https://download.geofabrik.de/australia-oceania.html). It keeps walkable
   streets and paths in the Newcastle–Sydney–Wollongong box (`EATCLUB_MAP_BBOX`) and writes `data/walk-graph.bin`
