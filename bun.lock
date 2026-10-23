@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-skills",
+      "name": "skills",
       "dependencies": {
         "@libsql/client": "^0.18.0",
         "google-travel-website-api": "0.5.2",

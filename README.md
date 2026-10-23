@@ -1,4 +1,4 @@
-# API skills
+# Skills
 
 Reusable, data-only agent skills backed by reverse-engineered website APIs. Each skill documents its requests, data structures and limitations and provides a CLI. The calling agent chooses how to interpret and present the data. No UI, MCP server, recommendation policy or answer formatting.
 

@@ -1,5 +1,5 @@
 {
-  "name": "agent-skills",
+  "name": "skills",
   "version": "0.1.0",
   "description": "Reusable agent skills with local CLIs: EatClub and Google Flights",
   "type": "module",
