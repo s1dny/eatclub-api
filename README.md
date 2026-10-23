@@ -1,6 +1,6 @@
 # Skills
 
-Data-only agent skills for reverse-engineered APIs. Each skill provides a CLI and API reference. Commands return JSON; agents decide how to use and display it.
+Agent skills with data-only CLIs and small reusable app starters. Agents decide how to interpret data and extend generated apps.
 
 ## Setup
 
@@ -41,6 +41,18 @@ bun run flights grid --origin SYD --destination NRT --start 2026-11-01 --end 202
 `filters` lists search options. `endpoints --discover` lists service methods. Date-grid responses and checkpoints are stored in `data/flights/`.
 
 [Skill](skills/flights/SKILL.md) · [API reference](skills/flights/references/api.md)
+
+## Google Maps
+
+A separate skill with a tiny Bun/TypeScript starter for a 2D Google satellite map with airport/stay pins, a details panel and calculated driving routes.
+
+```sh
+bun run maps init /absolute/path/to/new-map
+```
+
+Generated apps have `locations.ts`, `map.ts`, `server.ts` and an ignored `.env.local`. Set `GOOGLE_MAPS_API_KEY` in this repository’s `.env` to reuse the browser key in new apps. In a generated app, run `bun install`, then `bun run dev`.
+
+[Skill and setup](skills/google-maps/SKILL.md)
 
 ## Development
 

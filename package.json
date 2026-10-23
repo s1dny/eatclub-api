@@ -1,7 +1,7 @@
 {
   "name": "skills",
   "version": "0.1.0",
-  "description": "Reusable agent skills with local CLIs: EatClub and Google Flights",
+  "description": "Reusable agent skills with data CLIs and app starters",
   "type": "module",
   "private": true,
   "scripts": {
@@ -13,7 +13,8 @@
     "flights": "bun src/flights/cli.ts",
     "skills:install": "bun scripts/install.ts",
     "format": "bun fmt",
-    "format:check": "bun fmt --check"
+    "format:check": "bun fmt --check",
+    "maps": "bun src/maps/cli.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
